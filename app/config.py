@@ -21,7 +21,8 @@ class Settings(BaseSettings):
     debug: bool = True
 
     # 数据库配置
-    # 建议在 Docker 中使用 data 目录挂载，以避免文件挂载权限或类型问题
+    # 本地开发使用 SQLite，生产环境使用 PostgreSQL (Supabase)
+    # Vercel 部署时通过环境变量设置 DATABASE_URL
     database_url: str = f"sqlite+aiosqlite:///{BASE_DIR}/data/team_manage.db"
 
     # 安全配置
