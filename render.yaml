@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: team-manage
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_PASSWORD
+        value: admin123
+      - key: DATABASE_URL
+        value: sqlite+aiosqlite:///./data/team_manage.db
+      - key: DEBUG
+        value: false
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
