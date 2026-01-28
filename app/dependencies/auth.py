@@ -1,0 +1,83 @@
+"""
+认证依赖
+用于保护需要认证的路由
+"""
+import logging
+from typing import Optional
+from fastapi import Request, HTTPException, status
+from fastapi.responses import RedirectResponse
+
+logger = logging.getLogger(__name__)
+
+
+def get_current_user(request: Request) -> dict:
+    """
+    获取当前登录用户
+    从 Session 中获取用户信息
+
+    Args:
+        request: FastAPI Request 对象
+
+    Returns:
+        用户信息字典
+
+    Raises:
+        HTTPException: 如果未登录
+    """
+    user = request.session.get("user")
+
+    if not user:
+        logger.warning("未登录用户尝试访问受保护资源")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="未登录"
+        )
+
+    return user
+
+
+def require_admin(request: Request) -> dict:
+    """
+    要求管理员权限
+    检查用户是否已登录且具有管理员权限
+
+    Args:
+        request: FastAPI Request 对象
+
+    Returns:
+        用户信息字典
+
+    Raises:
+        HTTPException: 如果未登录或无权限
+    """
+    user = request.session.get("user")
+
+    if not user:
+        logger.warning("未登录用户尝试访问管理员资源")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="未登录，请先登录"
+        )
+
+    if not user.get("is_admin"):
+        logger.warning(f"非管理员用户尝试访问管理员资源: {user.get('username')}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="无权限访问"
+        )
+
+    return user
+
+
+def optional_user(request: Request) -> Optional[dict]:
+    """
+    可选的用户信息
+    如果已登录则返回用户信息，否则返回 None
+
+    Args:
+        request: FastAPI Request 对象
+
+    Returns:
+        用户信息字典或 None
+    """
+    return request.session.get("user")
