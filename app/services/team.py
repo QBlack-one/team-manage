@@ -135,7 +135,7 @@ class TeamService:
 
             # 6. 确定状态
             status = "active"
-            if current_members >= 6:
+            if current_members >= 5:
                 status = "full"
             elif expires_at and expires_at < datetime.now():
                 status = "expired"
@@ -170,7 +170,7 @@ class TeamService:
                 subscription_plan=selected_account["subscription_plan"],
                 expires_at=expires_at,
                 current_members=current_members,
-                max_members=6,
+                max_members=5,
                 status=status,
                 last_sync=get_now()
             )
@@ -396,7 +396,7 @@ class TeamService:
 
             # 7. 确定状态
             status = "active"
-            if current_members >= 6:
+            if current_members >= 5:
                 status = "full"
             elif expires_at and expires_at < datetime.now():
                 status = "expired"
