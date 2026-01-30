@@ -7,9 +7,9 @@
 }
 
 :root {
-    --primary: #6366f1;
-    --primary-hover: #4f46e5;
-    --primary-glow: rgba(99, 102, 241, 0.4);
+    --primary: #0ea5e9;
+    --primary-hover: #0284c7;
+    --primary-glow: rgba(14, 165, 233, 0.4);
 
     --bg-main: #0b0f1a;
     --bg-surface: #13192b;
@@ -38,8 +38,8 @@ body {
     font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background-color: var(--bg-main);
     background-image:
-        radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
-        radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.1) 0px, transparent 50%);
+        radial-gradient(at 0% 0%, rgba(14, 165, 233, 0.15) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(56, 189, 248, 0.1) 0px, transparent 50%);
     min-height: 100vh;
     display: flex;
     align-items: center;
@@ -154,7 +154,7 @@ body {
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, var(--primary), #a855f7);
+    background: linear-gradient(135deg, var(--primary), #38bdf8);
     color: white;
     width: 100%;
     box-shadow: 0 4px 15px var(--primary-glow);
@@ -195,11 +195,11 @@ body {
     background-color: rgba(255, 255, 255, 0.05);
     border-color: var(--primary);
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.1);
 }
 
 .team-card.selected {
-    background-color: rgba(99, 102, 241, 0.1);
+    background-color: rgba(14, 165, 233, 0.1);
     border-color: var(--primary);
     box-shadow: 0 0 0 1px var(--primary);
 }
@@ -236,12 +236,12 @@ body {
 }
 
 .badge-plus {
-    background: rgba(99, 102, 241, 0.15);
+    background: rgba(14, 165, 233, 0.15);
     color: #818cf8;
 }
 
 .badge-pro {
-    background: rgba(168, 85, 247, 0.15);
+    background: rgba(56, 189, 248, 0.15);
     color: #c084fc;
 }
 
@@ -381,4 +381,83 @@ body {
     .actions {
         flex-direction: column;
     }
+}
+
+/* ==================== 入场动画 ==================== */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes float {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+/* 头部入场动画 */
+.header {
+    opacity: 0;
+    animation: fadeInUp 0.6s ease-out forwards;
+}
+
+/* 卡片入场动画 */
+.card {
+    opacity: 0;
+    animation: fadeInUp 0.6s ease-out forwards;
+    animation-delay: 0.2s;
+}
+
+/* Team 卡片悬停增强 */
+.team-card {
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.team-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 30px rgba(14, 165, 233, 0.2);
+}
+
+/* 按钮悬停增强 */
+.btn-primary:hover:not(:disabled) {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 30px var(--primary-glow);
+}
+
+.btn-primary:active:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+/* 输入框聚焦动画 */
+.form-input {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.form-input:focus {
+    transform: scale(1.01);
+}
+
+/* 成功图标动画 */
+.result-success .result-icon {
+    animation: float 3s ease-in-out infinite;
+}
+
+/* 剩余车位徽章动画 */
+.spots-badge {
+    animation: fadeInUp 0.5s ease-out forwards;
+    animation-delay: 0.4s;
+    opacity: 0;
 }

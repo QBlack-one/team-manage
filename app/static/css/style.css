@@ -6,11 +6,11 @@
 }
 
 :root {
-    --primary: #6366f1;
-    --primary-hover: #4f46e5;
-    --primary-glow: rgba(99, 102, 241, 0.4);
-    --accent: #a855f7;
-    --accent-glow: rgba(168, 85, 247, 0.4);
+    --primary: #0ea5e9;
+    --primary-hover: #0284c7;
+    --primary-glow: rgba(14, 165, 233, 0.4);
+    --accent: #38bdf8;
+    --accent-glow: rgba(56, 189, 248, 0.4);
 
     --bg-main: #0b0f1a;
     --bg-surface: #13192b;
@@ -62,8 +62,8 @@ body {
     font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background-color: var(--bg-main);
     background-image:
-        radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
-        radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.1) 0px, transparent 50%);
+        radial-gradient(at 0% 0%, rgba(14, 165, 233, 0.15) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(56, 189, 248, 0.1) 0px, transparent 50%);
     color: var(--text-main);
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
@@ -554,11 +554,13 @@ body {
 
 /* 页脚 */
 .footer {
-    background-color: white;
-    border-top: 1px solid var(--border-color);
+    background-color: var(--bg-glass);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border-glass);
     padding: 1.5rem;
     text-align: center;
-    color: var(--secondary-color);
+    color: var(--text-muted);
     font-size: 0.875rem;
 }
 
@@ -958,4 +960,149 @@ body {
     margin-top: 1rem;
     max-height: 300px;
     overflow-y: auto;
+}
+
+/* ==================== 入场动画 ==================== */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes scaleIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* 统计卡片入场动画 */
+.stat-card {
+    opacity: 0;
+    animation: fadeInUp 0.5s ease-out forwards;
+}
+
+.stat-card:nth-child(1) {
+    animation-delay: 0.1s;
+}
+
+.stat-card:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.stat-card:nth-child(3) {
+    animation-delay: 0.3s;
+}
+
+.stat-card:nth-child(4) {
+    animation-delay: 0.4s;
+}
+
+/* 内容区块入场动画 */
+.content-section {
+    opacity: 0;
+    animation: fadeInUp 0.6s ease-out forwards;
+    animation-delay: 0.3s;
+}
+
+/* 页面标题入场动画 */
+.page-header {
+    opacity: 0;
+    animation: fadeIn 0.4s ease-out forwards;
+}
+
+/* ==================== 增强悬停效果 ==================== */
+
+/* 按钮悬停增强 */
+.btn-primary:hover:not(:disabled) {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px var(--primary-glow);
+    filter: brightness(1.15);
+}
+
+.btn-primary:active:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px var(--primary-glow);
+}
+
+/* 统计卡片悬停增强 */
+.stat-card {
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.stat-card:hover {
+    transform: translateY(-8px);
+    border-color: var(--border-highlight);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), var(--shadow-glow);
+}
+
+/* 内容区块悬停效果 */
+.content-section {
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.content-section:hover {
+    border-color: var(--border-highlight);
+}
+
+/* 表格行悬停效果增强 */
+.data-table tbody tr {
+    transition: all 0.3s ease;
+}
+
+.data-table tbody tr:hover {
+    background-color: rgba(14, 165, 233, 0.05);
+    box-shadow: inset 3px 0 0 var(--primary);
+}
+
+/* 模态框入场动画 */
+.modal-overlay.active .modal {
+    animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* 侧边栏菜单项悬停效果增强 */
+.menu-item a {
+    position: relative;
+    overflow: hidden;
+}
+
+.menu-item a::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 3px;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    transform: scaleY(0);
+    transition: transform 0.3s ease;
+}
+
+.menu-item a:hover::before {
+    transform: scaleY(1);
+}
+
+.menu-item.active a::before {
+    transform: scaleY(1);
 }
