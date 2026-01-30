@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.database import get_db
 from app.services.auth import auth_service
@@ -20,6 +22,9 @@ router = APIRouter(
     prefix="/auth",
     tags=["auth"]
 )
+
+# 创建速率限制器 (使用 app.state.limiter 会在路由注册时自动关联)
+limiter = Limiter(key_func=get_remote_address)
 
 
 # 请求模型
@@ -56,6 +61,7 @@ class ChangePasswordResponse(BaseModel):
 
 
 @router.post("/login", response_model=LoginResponse)
+@limiter.limit("5/minute")  # 每分钟最多5次登录尝试
 async def login(
     request: Request,
     login_data: LoginRequest,

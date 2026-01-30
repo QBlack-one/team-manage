@@ -4,6 +4,7 @@
 """
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
+import secrets
 
 
 # 项目根目录
@@ -18,7 +19,7 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     app_host: str = "0.0.0.0"
     app_port: int = 8008
-    debug: bool = True
+    debug: bool = False  # 默认关闭调试模式
 
     # 数据库配置
     # 本地开发使用 SQLite，生产环境使用 PostgreSQL (Supabase)
@@ -26,8 +27,12 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite+aiosqlite:///{BASE_DIR}/data/team_manage.db"
 
     # 安全配置
-    secret_key: str = "your-secret-key-here-change-in-production"
-    admin_password: str = "admin123"
+    # 重要: 生产环境必须通过 .env 文件设置这些值!
+    secret_key: str = secrets.token_urlsafe(32)  # 动态生成默认密钥
+    admin_password: str = "admin123"  # 首次运行后应立即修改
+
+    # HTTPS 配置
+    https_only: bool = False  # 生产环境应设为 True
 
     # 日志配置
     log_level: str = "INFO"
@@ -51,3 +56,4 @@ class Settings(BaseSettings):
 
 # 创建全局配置实例
 settings = Settings()
+

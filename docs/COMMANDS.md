@@ -137,6 +137,36 @@ conn.close()
 "
 ```
 
+### 查看可用的备份文件
+
+```bash
+ls -la /root/backups/
+```
+
+### 恢复指定的备份
+
+```bash
+# 1. 停止服务
+pkill -f "uvicorn app.main:app"
+
+# 2. 恢复备份（替换为实际的备份文件名）
+cp /root/backups/team_manage_20260130_143000.db /root/team-manage/data/team_manage.db
+
+# 3. 重启服务
+cd /root/team-manage
+source venv/bin/activate
+nohup python -m uvicorn app.main:app --host 0.0.0.0 --port 8008 > logs.txt 2>&1 &
+```
+
+### 一键恢复最新备份
+
+```bash
+pkill -f "uvicorn app.main:app" && \
+cp $(ls -t /root/backups/team_manage_*.db | head -1) /root/team-manage/data/team_manage.db && \
+cd /root/team-manage && source venv/bin/activate && \
+nohup python -m uvicorn app.main:app --host 0.0.0.0 --port 8008 > logs.txt 2>&1 &
+```
+
 ---
 
 ## 常见问题

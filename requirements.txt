@@ -36,3 +36,6 @@ pytz>=2023.3
 
 # Excel Export
 xlsxwriter>=3.1.9
+
+# Rate Limiting
+slowapi>=0.1.9
