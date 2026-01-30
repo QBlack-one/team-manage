@@ -37,19 +37,19 @@ ssh root@你的服务器IP
 ### 进入项目目录
 
 ```bash
-cd /opt/team-manage
+cd /root/team-manage
 ```
 
 ### 拉取最新代码并重启
 
 ```bash
-cd /opt/team-manage && ./scripts/update.sh
+bash /root/team-manage/scripts/update.sh
 ```
 
 ### 手动更新步骤
 
 ```bash
-cd /opt/team-manage
+cd /root/team-manage
 git pull origin master
 source venv/bin/activate
 pip install -r requirements.txt
@@ -79,7 +79,7 @@ sudo journalctl -u team-manage -n 100
 ### 使用 Python 执行 SQL（推荐）
 
 ```bash
-cd /opt/team-manage
+cd /root/team-manage
 python3 -c "
 import sqlite3
 conn = sqlite3.connect('data/team_manage.db')
@@ -95,7 +95,7 @@ conn.close()
 ### 查看所有团队
 
 ```bash
-cd /opt/team-manage
+cd /root/team-manage
 python3 -c "
 import sqlite3
 conn = sqlite3.connect('data/team_manage.db')
@@ -110,7 +110,7 @@ conn.close()
 ### 更新团队状态（current_members >= max_members 时设为 full）
 
 ```bash
-cd /opt/team-manage
+cd /root/team-manage
 python3 -c "
 import sqlite3
 conn = sqlite3.connect('data/team_manage.db')
@@ -125,7 +125,7 @@ conn.close()
 ### 修改团队最大人数
 
 ```bash
-cd /opt/team-manage
+cd /root/team-manage
 python3 -c "
 import sqlite3
 conn = sqlite3.connect('data/team_manage.db')
