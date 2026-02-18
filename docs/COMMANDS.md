@@ -150,7 +150,7 @@ ls -la /root/backups/
 pkill -f "uvicorn app.main:app"
 
 # 2. 恢复备份（替换为实际的备份文件名）
-cp /root/backups/team_manage_20260130_143000.db /root/team-manage/data/team_manage.db
+cp /root/backups/team_manage_20260130_225033.db /root/team-manage/data/team_manage.db
 
 # 3. 重启服务
 cd /root/team-manage

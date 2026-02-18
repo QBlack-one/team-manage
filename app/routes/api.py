@@ -23,6 +23,25 @@ router = APIRouter(
 team_service = TeamService()
 
 
+@router.get("/teams/refresh-all")
+async def refresh_all_teams(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """批量刷新所有 Team 信息"""
+    try:
+        logger.info("批量刷新所有 Team 信息")
+        result = await team_service.sync_all_teams(db)
+        return JSONResponse(content=result)
+
+    except Exception as e:
+        logger.error(f"批量刷新 Team 失败: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"success": False, "error": f"批量刷新 Team 失败: {str(e)}"}
+        )
+
+
 @router.get("/teams/{team_id}/refresh")
 async def refresh_team(
     team_id: int,

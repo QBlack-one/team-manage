@@ -43,9 +43,19 @@
 <div class="content-section">
     <div class="section-header">
         <h3>Team 列表</h3>
-        <button onclick="showModal('importTeamModal')" class="btn btn-primary">
-            <i data-lucide="plus-circle"></i> 导入 Team
-        </button>
+        <div class="action-buttons">
+            {% if teams|selectattr('status', 'equalto', 'error')|list|length > 0 %}
+            <button onclick="deleteErrorTeams()" class="btn btn-danger">
+                <i data-lucide="trash-2"></i> 删除异常账号
+            </button>
+            {% endif %}
+            <button onclick="refreshAllTeams()" class="btn btn-secondary">
+                <i data-lucide="refresh-cw"></i> 批量刷新
+            </button>
+            <button onclick="showModal('importTeamModal')" class="btn btn-primary">
+                <i data-lucide="plus-circle"></i> 导入 Team
+            </button>
+        </div>
     </div>
 
     {% if teams %}
@@ -153,6 +163,30 @@
         }
     }
 
+    async function refreshAllTeams() {
+        if (!confirm('确定要批量刷新所有 Team 的信息吗?\n\n这可能需要一些时间。')) {
+            return;
+        }
+
+        try {
+            showToast('正在批量刷新，请稍候...', 'info');
+            const response = await fetch('/api/teams/refresh-all', {
+                method: 'GET'
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                showToast(`刷新完成: 成功 ${data.success_count}/${data.total}`, 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast(data.error || '批量刷新失败', 'error');
+            }
+        } catch (error) {
+            showToast('网络错误', 'error');
+        }
+    }
+
     async function deleteTeam(teamId, email) {
         if (!confirm(`确定要删除 Team "${email}" 吗?\n\n此操作不可恢复!`)) {
             return;
@@ -168,6 +202,31 @@
 
             if (response.ok && data.success) {
                 showToast('删除成功', 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast(data.error || '删除失败', 'error');
+            }
+        } catch (error) {
+            showToast('网络错误', 'error');
+        }
+    }
+
+    async function deleteErrorTeams() {
+        const errorCount = document.querySelectorAll('.status-error').length;
+        if (!confirm(`确定要删除所有 ${errorCount} 个异常状态的 Team 吗?\n\n此操作不可恢复!`)) {
+            return;
+        }
+
+        try {
+            showToast('正在删除异常账号...', 'info');
+            const response = await fetch('/admin/teams/error/delete-all', {
+                method: 'POST'
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                showToast(data.message || '删除成功', 'success');
                 setTimeout(() => location.reload(), 1000);
             } else {
                 showToast(data.error || '删除失败', 'error');

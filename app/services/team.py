@@ -1218,6 +1218,59 @@ class TeamService:
                 "error": f"删除 Team 失败: {str(e)}"
             }
 
+    async def delete_error_teams(
+        self,
+        db_session: AsyncSession
+    ) -> Dict[str, Any]:
+        """
+        批量删除所有异常状态的 Team
+
+        Args:
+            db_session: 数据库会话
+
+        Returns:
+            结果字典,包含 success, deleted_count, message, error
+        """
+        try:
+            # 1. 查询所有 error 状态的 Team
+            stmt = select(Team).where(Team.status == "error")
+            result = await db_session.execute(stmt)
+            error_teams = result.scalars().all()
+
+            if not error_teams:
+                return {
+                    "success": True,
+                    "deleted_count": 0,
+                    "message": "没有异常状态的 Team",
+                    "error": None
+                }
+
+            # 2. 批量删除
+            deleted_count = len(error_teams)
+            for team in error_teams:
+                await db_session.delete(team)
+
+            await db_session.commit()
+
+            logger.info(f"批量删除 {deleted_count} 个异常 Team 成功")
+
+            return {
+                "success": True,
+                "deleted_count": deleted_count,
+                "message": f"已删除 {deleted_count} 个异常 Team",
+                "error": None
+            }
+
+        except Exception as e:
+            await db_session.rollback()
+            logger.error(f"批量删除异常 Team 失败: {e}")
+            return {
+                "success": False,
+                "deleted_count": 0,
+                "message": None,
+                "error": f"批量删除异常 Team 失败: {str(e)}"
+            }
+
 
 # 创建全局 Team 服务实例
 team_service = TeamService()

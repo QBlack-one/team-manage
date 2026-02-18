@@ -37,6 +37,31 @@ class AddMemberRequest(BaseModel):
     email: str = Field(..., description="成员邮箱")
 
 
+@router.post("/teams/error/delete-all")
+async def delete_error_teams(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_admin)
+):
+    """批量删除所有异常状态的 Team"""
+    try:
+        logger.info("管理员批量删除异常 Team")
+        result = await team_service.delete_error_teams(db)
+
+        if not result["success"]:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content=result
+            )
+        return JSONResponse(content=result)
+
+    except Exception as e:
+        logger.error(f"批量删除异常 Team 失败: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"success": False, "error": f"批量删除异常 Team 失败: {str(e)}"}
+        )
+
+
 @router.post("/teams/{team_id}/delete")
 async def delete_team(
     team_id: int,
