@@ -41,6 +41,12 @@
                         <span class="menu-text">控制台</span>
                     </a>
                 </li>
+                <li class="menu-item {% if active_page == 'plus' %}active{% endif %}">
+                    <a href="/admin/plus">
+                        <span class="menu-icon" data-lucide="user"></span>
+                        <span class="menu-text">Plus 管理</span>
+                    </a>
+                </li>
                 <li class="menu-item {% if active_page == 'codes' %}active{% endif %}">
                     <a href="/admin/codes">
                         <span class="menu-icon" data-lucide="ticket"></span>
@@ -127,6 +133,62 @@
                         <div id="batchResultsContainer" style="display: none; margin-bottom: 1rem;">
                             <h4>导入结果</h4>
                             <div id="batchResults"></div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">批量导入</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 导入 Plus 模态框 -->
+    <div id="importPlusModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>导入 Plus</h3>
+                <button class="modal-close" onclick="hideModal('importPlusModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-tabs">
+                    <button class="modal-tab-btn active"
+                        onclick="switchModalTab('importPlusModal', 'singlePlusImport')">单个导入</button>
+                    <button class="modal-tab-btn"
+                        onclick="switchModalTab('importPlusModal', 'batchPlusImport')">批量导入</button>
+                </div>
+
+                <div id="singlePlusImport" class="import-panel">
+                    <form id="singlePlusImportForm" onsubmit="handleSinglePlusImport(event)">
+                        <div class="form-group">
+                            <label>Access Token (AT) <span class="required">*</span></label>
+                            <textarea name="accessToken" class="form-control" rows="4"
+                                placeholder="eyJhbGciOiJSUzI1Ni..." required></textarea>
+                            <small class="form-text">必填项，以 eyJ 开头的 JWT Token</small>
+                        </div>
+                        <div class="form-group">
+                            <label>邮箱</label>
+                            <input type="email" name="email" class="form-control" placeholder="user@example.com">
+                            <small class="form-text">可选，如果不填写将从 Token 中自动提取</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Account ID</label>
+                            <input type="text" name="accountId" class="form-control"
+                                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+                            <small class="form-text">可选，如果不填写将从 API 自动获取</small>
+                        </div>
+                        <button type="submit" class="btn btn-primary">导入</button>
+                    </form>
+                </div>
+
+                <div id="batchPlusImport" class="import-panel" style="display: none;">
+                    <form id="batchPlusImportForm" onsubmit="handleBatchPlusImport(event)">
+                        <div class="form-group">
+                            <label>批量导入内容 <span class="required">*</span></label>
+                            <textarea name="batchContent" class="form-control" rows="8" placeholder="一行一个 AT Token..."
+                                required></textarea>
+                        </div>
+                        <div id="batchPlusResultsContainer" style="display: none; margin-bottom: 1rem;">
+                            <h4>导入结果</h4>
+                            <div id="batchPlusResults"></div>
                         </div>
                         <button type="submit" class="btn btn-primary">批量导入</button>
                     </form>

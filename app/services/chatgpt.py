@@ -507,6 +507,67 @@ class ChatGPTService:
             "error": None
         }
 
+    async def get_plus_account_info(
+        self,
+        access_token: str,
+        db_session: DBAsyncSession
+    ) -> Dict[str, Any]:
+        """
+        获取非 Team 类型的账户信息 (Plus/Pro 等)
+
+        Args:
+            access_token: AT Token
+            db_session: 数据库会话
+
+        Returns:
+            结果字典,包含 success, accounts (账户列表), error
+        """
+        url = f"{self.BASE_URL}/accounts/check/v4-2023-04-27"
+
+        headers = {
+            "Authorization": f"Bearer {access_token}"
+        }
+
+        logger.info("获取 Plus 账户信息")
+
+        result = await self._make_request("GET", url, headers, db_session=db_session)
+
+        if not result["success"]:
+            return {
+                "success": False,
+                "accounts": [],
+                "error": result["error"]
+            }
+
+        # 解析响应
+        data = result["data"]
+        accounts_data = data.get("accounts", {})
+
+        # 提取所有非 Team 类型的账户 (Plus/Pro 等)
+        plus_accounts = []
+        for account_id, account_info in accounts_data.items():
+            account = account_info.get("account", {})
+            entitlement = account_info.get("entitlement", {})
+
+            # 只保留非 Team 类型的账户
+            if account.get("plan_type") != "team":
+                plus_accounts.append({
+                    "account_id": account_id,
+                    "name": account.get("name", ""),
+                    "plan_type": account.get("plan_type", ""),
+                    "subscription_plan": entitlement.get("subscription_plan", ""),
+                    "expires_at": entitlement.get("expires_at", ""),
+                    "has_active_subscription": entitlement.get("has_active_subscription", False),
+                })
+
+        logger.info(f"获取账户信息成功: 共 {len(plus_accounts)} 个 Plus 账户")
+
+        return {
+            "success": True,
+            "accounts": plus_accounts,
+            "error": None
+        }
+
     async def close(self):
         """关闭 HTTP 会话"""
         if self.session:

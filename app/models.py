@@ -39,6 +39,30 @@ class Team(Base):
     )
 
 
+class PlusAccount(Base):
+    """Plus 账号信息表"""
+    __tablename__ = "plus_accounts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    email = Column(String(255), nullable=False, comment="Plus 账号邮箱")
+    access_token_encrypted = Column(Text, nullable=False, comment="加密存储的 AT")
+    encryption_key_id = Column(String(50), comment="加密密钥 ID")
+    account_id = Column(String(100), comment="当前使用的 account-id")
+    account_name = Column(String(255), comment="Account 名称")
+    plan_type = Column(String(50), comment="计划类型")
+    subscription_plan = Column(String(100), comment="订阅计划")
+    expires_at = Column(DateTime, comment="订阅到期时间")
+    status = Column(String(20), default="active", comment="状态: active/expired/error")
+    error_message = Column(Text, comment="错误信息")
+    last_sync = Column(DateTime, comment="最后同步时间")
+    created_at = Column(DateTime, default=get_now, comment="创建时间")
+
+    # 索引
+    __table_args__ = (
+        Index("idx_plus_status", "status"),
+    )
+
+
 class TeamAccount(Base):
     """Team Account 关联表"""
     __tablename__ = "team_accounts"

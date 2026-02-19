@@ -259,6 +259,105 @@ async function handleBatchImport(event) {
 
 // === 兑换码生成逻辑 ===
 
+// === Plus 导入逻辑 ===
+
+async function handleSinglePlusImport(event) {
+    event.preventDefault();
+    const form = event.target;
+    const accessToken = form.accessToken.value.trim();
+    const email = form.email.value.trim();
+    const accountId = form.accountId.value.trim();
+    const submitButton = form.querySelector('button[type="submit"]');
+
+    submitButton.disabled = true;
+    submitButton.textContent = '导入中...';
+
+    try {
+        const result = await apiCall('/admin/plus/import', {
+            method: 'POST',
+            body: JSON.stringify({
+                import_type: 'single',
+                access_token: accessToken,
+                email: email || null,
+                account_id: accountId || null
+            })
+        });
+
+        if (result.success) {
+            showToast('Plus 导入成功！', 'success');
+            form.reset();
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showToast(result.error || '导入失败', 'error');
+        }
+    } catch (error) {
+        showToast('网络错误', 'error');
+    } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = '导入';
+    }
+}
+
+async function handleBatchPlusImport(event) {
+    event.preventDefault();
+    const form = event.target;
+    const batchContent = form.batchContent.value.trim();
+    const submitButton = form.querySelector('button[type="submit"]');
+    const resultsContainer = document.getElementById('batchPlusResultsContainer');
+    const resultsDiv = document.getElementById('batchPlusResults');
+
+    submitButton.disabled = true;
+    submitButton.textContent = '导入中...';
+
+    try {
+        const result = await apiCall('/admin/plus/import', {
+            method: 'POST',
+            body: JSON.stringify({
+                import_type: 'batch',
+                content: batchContent
+            })
+        });
+
+        if (result.success) {
+            const data = result.data;
+            let html = `<div class="batch-summary">
+                <p>总数: ${data.total} | 成功: <span class="text-success">${data.success_count}</span> | 失败: <span class="text-danger">${data.failed_count}</span></p>
+            </div>`;
+
+            if (data.results && data.results.length > 0) {
+                html += '<div class="batch-results"><table class="data-table"><thead><tr><th>邮箱</th><th>状态</th><th>消息</th></tr></thead><tbody>';
+                data.results.forEach(res => {
+                    const statusClass = res.success ? 'text-success' : 'text-danger';
+                    const statusText = res.success ? '成功' : '失败';
+                    html += `<tr>
+                        <td>${res.email}</td>
+                        <td class="${statusClass}">${statusText}</td>
+                        <td>${res.success ? res.message : res.error}</td>
+                    </tr>`;
+                });
+                html += '</tbody></table></div>';
+            }
+
+            resultsDiv.innerHTML = html;
+            resultsContainer.style.display = 'block';
+
+            if (data.failed_count === 0) {
+                showToast('全部导入成功！', 'success');
+                setTimeout(() => location.reload(), 2000);
+            }
+        } else {
+            showToast(result.error || '批量导入失败', 'error');
+        }
+    } catch (error) {
+        showToast('网络错误', 'error');
+    } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = '批量导入';
+    }
+}
+
+// === 兑换码生成逻辑（原有）===
+
 async function generateSingle(event) {
     event.preventDefault();
     const form = event.target;

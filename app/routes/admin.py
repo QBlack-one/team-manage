@@ -13,7 +13,7 @@ from app.services.team import team_service
 from app.services.redemption import RedemptionService
 
 # 导入子路由
-from app.routes import admin_teams, admin_codes, admin_records, admin_settings
+from app.routes import admin_teams, admin_codes, admin_records, admin_settings, admin_plus
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,7 @@ router.include_router(admin_teams.router)
 router.include_router(admin_codes.router)
 router.include_router(admin_records.router)
 router.include_router(admin_settings.router)
+router.include_router(admin_plus.router)
 
 # 服务实例
 redemption_service = RedemptionService()
