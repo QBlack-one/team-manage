@@ -545,26 +545,30 @@ class ChatGPTService:
 
         # 提取所有非 Team 类型的账户 (Plus/Pro 等)
         plus_accounts = []
+        all_plan_types = []
         for account_id, account_info in accounts_data.items():
             account = account_info.get("account", {})
             entitlement = account_info.get("entitlement", {})
+            plan_type = account.get("plan_type", "")
+            all_plan_types.append(plan_type)
 
             # 只保留非 Team 类型的账户
-            if account.get("plan_type") != "team":
+            if plan_type != "team":
                 plus_accounts.append({
                     "account_id": account_id,
                     "name": account.get("name", ""),
-                    "plan_type": account.get("plan_type", ""),
+                    "plan_type": plan_type,
                     "subscription_plan": entitlement.get("subscription_plan", ""),
                     "expires_at": entitlement.get("expires_at", ""),
                     "has_active_subscription": entitlement.get("has_active_subscription", False),
                 })
 
-        logger.info(f"获取账户信息成功: 共 {len(plus_accounts)} 个 Plus 账户")
+        logger.info(f"获取账户信息成功: 共 {len(plus_accounts)} 个 Plus 账户, 所有 plan_type: {all_plan_types}")
 
         return {
             "success": True,
             "accounts": plus_accounts,
+            "all_plan_types": all_plan_types,
             "error": None
         }
 

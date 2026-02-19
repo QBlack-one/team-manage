@@ -74,8 +74,16 @@ class PlusService:
                 }
 
             plus_accounts = account_result["accounts"]
+            all_plan_types = account_result.get("all_plan_types", [])
 
             if not plus_accounts:
+                if all_plan_types:
+                    return {
+                        "success": False,
+                        "plus_id": None,
+                        "message": None,
+                        "error": f"该 Token 没有关联任何 Plus 账户 (发现的账户类型: {', '.join(all_plan_types)})"
+                    }
                 return {
                     "success": False,
                     "plus_id": None,
@@ -112,13 +120,14 @@ class PlusService:
 
             # 4. 解析过期时间
             expires_at = None
-            if selected_account["expires_at"]:
+            raw_expires = selected_account["expires_at"]
+            if raw_expires and isinstance(raw_expires, str):
                 try:
-                    expires_at = datetime.fromisoformat(
-                        selected_account["expires_at"].replace("+00:00", "")
-                    )
+                    # 处理各种时区格式: +00:00, Z, 或无时区
+                    cleaned = raw_expires.replace("Z", "+00:00").replace("+00:00", "")
+                    expires_at = datetime.fromisoformat(cleaned)
                 except Exception as e:
-                    logger.warning(f"解析过期时间失败: {e}")
+                    logger.warning(f"解析过期时间失败 (原始值: {raw_expires}): {e}")
 
             # 5. 确定状态
             status = "active"
@@ -342,8 +351,9 @@ class PlusService:
                     current_account = accounts[0]
 
             if not current_account:
+                all_plan_types = account_result.get("all_plan_types", [])
                 plus_account.status = "error"
-                plus_account.error_message = "该 Token 没有关联任何 Plus 账户"
+                plus_account.error_message = f"该 Token 没有关联任何 Plus 账户 (发现的账户类型: {', '.join(all_plan_types)})" if all_plan_types else "该 Token 没有关联任何 Plus 账户"
                 return {
                     "success": False,
                     "message": None,
@@ -352,13 +362,13 @@ class PlusService:
 
             # 4. 解析过期时间
             expires_at = None
-            if current_account["expires_at"]:
+            raw_expires = current_account["expires_at"]
+            if raw_expires and isinstance(raw_expires, str):
                 try:
-                    expires_at = datetime.fromisoformat(
-                        current_account["expires_at"].replace("+00:00", "")
-                    )
+                    cleaned = raw_expires.replace("Z", "+00:00").replace("+00:00", "")
+                    expires_at = datetime.fromisoformat(cleaned)
                 except (ValueError, TypeError) as e:
-                    logger.warning(f"解析过期时间失败: {e}")
+                    logger.warning(f"解析过期时间失败 (原始值: {raw_expires}): {e}")
 
             # 5. 确定状态
             status = "active"
