@@ -478,14 +478,26 @@ class ChatGPTService:
 
             # 只保留 Team 类型的账户
             if account.get("plan_type") == "team":
+                # 尝试从多个位置提取座位数上限
+                last_sub = account_info.get("last_active_subscription", {})
+                max_seats = (
+                    last_sub.get("quantity")
+                    or last_sub.get("max_seats")
+                    or account.get("max_seats")
+                    or entitlement.get("max_seats")
+                )
+
                 team_accounts.append({
                     "account_id": account_id,
                     "name": account.get("name", ""),
                     "plan_type": account.get("plan_type", ""),
                     "subscription_plan": entitlement.get("subscription_plan", ""),
                     "expires_at": entitlement.get("expires_at", ""),
-                    "has_active_subscription": entitlement.get("has_active_subscription", False)
+                    "has_active_subscription": entitlement.get("has_active_subscription", False),
+                    "max_seats": int(max_seats) if max_seats else None
                 })
+
+                logger.info(f"Team {account_id}: max_seats={max_seats}")
 
         logger.info(f"获取账户信息成功: 共 {len(team_accounts)} 个 Team 账户")
 

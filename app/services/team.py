@@ -134,17 +134,20 @@ class TeamService:
                 except Exception as e:
                     logger.warning(f"解析过期时间失败: {e}")
 
-            # 6. 确定状态
+            # 6. 确定 max_members (优先使用 API 返回的座位数)
+            max_members = selected_account.get("max_seats") or 5
+
+            # 7. 确定状态
             status = "active"
-            if current_members >= 5:
+            if current_members >= max_members:
                 status = "full"
             elif expires_at and expires_at < datetime.now():
                 status = "expired"
 
-            # 7. 加密 AT Token
+            # 8. 加密 AT Token
             encrypted_token = encryption_service.encrypt_token(access_token)
 
-            # 8. 检查是否已存在 (根据邮箱和 account_id)
+            # 9. 检查是否已存在 (根据邮箱和 account_id)
             stmt = select(Team).where(
                 Team.email == email,
                 Team.account_id == selected_account["account_id"]
@@ -160,7 +163,7 @@ class TeamService:
                     "error": f"该 Team 已存在 (ID: {existing_team.id})"
                 }
 
-            # 9. 创建 Team 记录
+            # 10. 创建 Team 记录
             team = Team(
                 email=email,
                 access_token_encrypted=encrypted_token,
@@ -171,7 +174,7 @@ class TeamService:
                 subscription_plan=selected_account["subscription_plan"],
                 expires_at=expires_at,
                 current_members=current_members,
-                max_members=5,
+                max_members=max_members,
                 status=status,
                 last_sync=get_now()
             )
@@ -380,14 +383,19 @@ class TeamService:
                 except (ValueError, TypeError) as e:
                     logger.warning(f"解析过期时间失败: {e}")
 
-            # 6. 确定状态
+            # 6. 更新 max_members (优先使用 API 返回的座位数)
+            api_max_seats = current_account.get("max_seats")
+            if api_max_seats:
+                team.max_members = api_max_seats
+
+            # 7. 确定状态
             status = "active"
             if current_members >= team.max_members:
                 status = "full"
             elif expires_at and expires_at < datetime.now():
                 status = "expired"
 
-            # 7. 更新 Team 信息
+            # 8. 更新 Team 信息
             team.account_id = current_account["account_id"]
             team.team_name = current_account["name"]
             team.plan_type = current_account["plan_type"]
@@ -398,7 +406,7 @@ class TeamService:
             team.error_message = None  # 成功时清除错误信息
             team.last_sync = get_now()
 
-            logger.info(f"Team {team.id} 数据同步成功, 成员数 {current_members}")
+            logger.info(f"Team {team.id} 数据同步成功, 成员数 {current_members}/{team.max_members}")
 
             return {
                 "success": True,
