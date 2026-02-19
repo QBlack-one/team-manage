@@ -4,8 +4,9 @@
 """
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
-import secrets
+import logging
 
+logger = logging.getLogger(__name__)
 
 # 项目根目录
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -27,8 +28,8 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite+aiosqlite:///{BASE_DIR}/data/team_manage.db"
 
     # 安全配置
-    # 重要: 生产环境必须通过 .env 文件设置这些值!
-    secret_key: str = secrets.token_urlsafe(32)  # 动态生成默认密钥
+    # 必须通过 .env 文件设置 SECRET_KEY，否则加密的 Token 和 Session 在重启后失效
+    secret_key: str = ""
     admin_password: str = "admin123"  # 首次运行后应立即修改
 
     # HTTPS 配置
@@ -56,4 +57,12 @@ class Settings(BaseSettings):
 
 # 创建全局配置实例
 settings = Settings()
+
+# 启动校验: secret_key 不能为空
+if not settings.secret_key:
+    raise RuntimeError(
+        "SECRET_KEY 未配置！请在 .env 文件中设置 SECRET_KEY，"
+        "否则加密的 Token 和 Session 在重启后会失效。\n"
+        "生成方法: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+    )
 
