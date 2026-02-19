@@ -12,10 +12,10 @@ engine = create_async_engine(
     settings.database_url,
     echo=settings.debug,  # 开发环境打印 SQL
     future=True,
-    # SQLite 并发保护配置
+    # SQLite WAL 模式下支持并发读取，适当增大连接池
     connect_args={"timeout": 30},  # 等待锁释放的超时时间（秒）
-    pool_size=1,          # SQLite 单文件锁，限制为单连接
-    max_overflow=0,       # 不允许额外连接
+    pool_size=5,          # WAL 模式允许并发读，增大连接池
+    max_overflow=2,       # 允许少量额外连接应对突发
     pool_pre_ping=True,   # 自动检测失效连接
 )
 

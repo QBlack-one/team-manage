@@ -219,7 +219,7 @@ class TeamService:
         db_session: AsyncSession
     ) -> Dict[str, Any]:
         """
-        批量导入 Team
+        批量导入 Team（并发执行，信号量限制并发数）
 
         Args:
             text: 包含 Token、邮箱、Account ID 的文本
@@ -242,32 +242,53 @@ class TeamService:
                     "error": "未能从文本中提取任何 Token"
                 }
 
-            # 2. 逐个导入
+            # 2. 并发导入（信号量限制并发数为 3）
+            sem = asyncio.Semaphore(3)
+
+            async def import_one(data: Dict[str, Any]) -> Dict[str, Any]:
+                async with sem:
+                    result = await self.import_team_single(
+                        access_token=data["token"],
+                        db_session=db_session,
+                        email=data.get("email"),
+                        account_id=data.get("account_id")
+                    )
+                    return {
+                        "email": data.get("email", "未知"),
+                        "account_id": data.get("account_id", "未指定"),
+                        "success": result["success"],
+                        "team_id": result["team_id"],
+                        "message": result["message"],
+                        "error": result["error"]
+                    }
+
+            import_results = await asyncio.gather(
+                *[import_one(d) for d in parsed_data],
+                return_exceptions=True
+            )
+
+            # 3. 统计结果
             results = []
             success_count = 0
             failed_count = 0
 
-            for data in parsed_data:
-                result = await self.import_team_single(
-                    access_token=data["token"],
-                    db_session=db_session,
-                    email=data.get("email"),
-                    account_id=data.get("account_id")
-                )
-
-                if result["success"]:
-                    success_count += 1
-                else:
+            for data, res in zip(parsed_data, import_results):
+                if isinstance(res, Exception):
                     failed_count += 1
-
-                results.append({
-                    "email": data.get("email", "未知"),
-                    "account_id": data.get("account_id", "未指定"),
-                    "success": result["success"],
-                    "team_id": result["team_id"],
-                    "message": result["message"],
-                    "error": result["error"]
-                })
+                    results.append({
+                        "email": data.get("email", "未知"),
+                        "account_id": data.get("account_id", "未指定"),
+                        "success": False,
+                        "team_id": None,
+                        "message": None,
+                        "error": f"导入异常: {str(res)}"
+                    })
+                else:
+                    results.append(res)
+                    if res["success"]:
+                        success_count += 1
+                    else:
+                        failed_count += 1
 
             logger.info(f"批量导入完成: 总数 {len(parsed_data)}, 成功 {success_count}, 失败 {failed_count}")
 
