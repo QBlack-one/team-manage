@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Team, RedemptionCode, RedemptionRecord
 from app.services.redemption import RedemptionService
-from app.services.team import TeamService
+from app.services.team import team_service as _team_service
 from app.services.chatgpt import ChatGPTService
 from app.services.encryption import encryption_service
 from app.utils.time_utils import get_now
@@ -24,7 +24,7 @@ class RedeemFlowService:
     def __init__(self):
         """初始化兑换流程服务"""
         self.redemption_service = RedemptionService()
-        self.team_service = TeamService()
+        self.team_service = _team_service
         self.chatgpt_service = ChatGPTService()
 
     async def verify_code_and_get_teams(

@@ -23,6 +23,15 @@
             <div class="stat-label">可用 Team</div>
         </div>
     </div>
+    {% if stats.error_teams > 0 %}
+    <div class="stat-card stat-danger">
+        <div class="stat-icon"><i data-lucide="alert-triangle"></i></div>
+        <div class="stat-info-group">
+            <div class="stat-value">{{ stats.error_teams }}</div>
+            <div class="stat-label">异常 Team</div>
+        </div>
+    </div>
+    {% endif %}
     <div class="stat-card stat-info">
         <div class="stat-icon"><i data-lucide="ticket"></i></div>
         <div class="stat-info-group">
@@ -44,12 +53,15 @@
     <div class="section-header">
         <h3>Team 列表</h3>
         <div class="action-buttons">
-            {% if teams|selectattr('status', 'equalto', 'error')|list|length > 0 %}
-            <button onclick="deleteErrorTeams()" class="btn btn-danger">
-                <i data-lucide="trash-2"></i> 删除异常账号
+            {% if stats.error_teams > 0 %}
+            <button onclick="retryErrorTeams()" class="btn btn-warning" id="retryErrorBtn">
+                <i data-lucide="rotate-cw"></i> 重试异常 ({{ stats.error_teams }})
+            </button>
+            <button onclick="deleteErrorTeams()" class="btn btn-danger" id="deleteErrorBtn">
+                <i data-lucide="trash-2"></i> 删除异常 ({{ stats.error_teams }})
             </button>
             {% endif %}
-            <button onclick="refreshAllTeams()" class="btn btn-secondary">
+            <button onclick="refreshAllTeams()" class="btn btn-secondary" id="refreshAllBtn">
                 <i data-lucide="refresh-cw"></i> 批量刷新
             </button>
             <button onclick="showModal('importTeamModal')" class="btn btn-primary">
@@ -106,13 +118,22 @@
                             异常
                             {% endif %}
                         </span>
+                        {% if team.status == 'error' and team.error_message %}
+                        <div class="error-detail" title="{{ team.error_message }}">{{ team.error_message }}</div>
+                        {% endif %}
                     </td>
                     <td>
                         <div class="action-buttons">
+                            {% if team.status == 'error' %}
+                            <button onclick="retryTeam({{ team.id }})" class="btn btn-sm btn-warning" title="重试">
+                                <i data-lucide="rotate-cw"></i> 重试
+                            </button>
+                            {% else %}
                             <button onclick="viewMembers({{ team.id }}, '{{ team.email }}')" class="btn btn-sm btn-info"
                                 title="查看成员">
                                 <i data-lucide="users"></i> 成员
                             </button>
+                            {% endif %}
                             <button onclick="refreshTeam({{ team.id }})" class="btn btn-sm btn-secondary" title="刷新">
                                 <i data-lucide="refresh-cw"></i> 刷新
                             </button>
@@ -134,22 +155,113 @@
     </div>
     {% endif %}
 </div>
+
+<!-- 批量操作结果模态框 -->
+<div class="modal-overlay" id="batchResultModal">
+    <div class="modal" style="max-width: 700px;">
+        <div class="modal-header">
+            <h3 id="batchResultTitle">操作结果</h3>
+            <button class="modal-close" onclick="closeBatchResult()">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <!-- 加载状态 -->
+            <div id="batchLoading" class="batch-loading">
+                <div class="spinner"></div>
+                <p id="batchLoadingText">正在处理中，请稍候...</p>
+            </div>
+            <!-- 结果内容 -->
+            <div id="batchResultContent" style="display: none;">
+                <div class="batch-summary" id="batchSummary"></div>
+                <div class="batch-result-table" id="batchResultTable"></div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
 
-    async function refreshTeam(teamId) {
-        if (!confirm('确定要刷新此 Team 的信息吗?')) {
-            return;
-        }
+    // === 批量结果模态框 ===
 
+    function showBatchModal(title, loadingText) {
+        document.getElementById('batchResultTitle').textContent = title;
+        document.getElementById('batchLoadingText').textContent = loadingText;
+        document.getElementById('batchLoading').style.display = 'flex';
+        document.getElementById('batchResultContent').style.display = 'none';
+        showModal('batchResultModal');
+    }
+
+    function showBatchResults(data) {
+        document.getElementById('batchLoading').style.display = 'none';
+        document.getElementById('batchResultContent').style.display = 'block';
+
+        // 摘要
+        const summary = document.getElementById('batchSummary');
+        const successRate = data.total > 0 ? Math.round(data.success_count / data.total * 100) : 0;
+        summary.innerHTML = `
+            <div class="summary-stats">
+                <div class="summary-item">
+                    <span class="summary-label">总计</span>
+                    <span class="summary-value">${data.total}</span>
+                </div>
+                <div class="summary-item summary-success">
+                    <span class="summary-label">成功</span>
+                    <span class="summary-value">${data.success_count}</span>
+                </div>
+                <div class="summary-item summary-fail">
+                    <span class="summary-label">失败</span>
+                    <span class="summary-value">${data.failed_count}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">成功率</span>
+                    <span class="summary-value">${successRate}%</span>
+                </div>
+            </div>
+        `;
+
+        // 详情表格
+        const tableDiv = document.getElementById('batchResultTable');
+        if (data.results && data.results.length > 0) {
+            let html = '<table class="data-table"><thead><tr><th>ID</th><th>邮箱</th><th>状态</th><th>详情</th></tr></thead><tbody>';
+            data.results.forEach(r => {
+                const statusClass = r.success ? 'text-success' : 'text-danger';
+                const statusText = r.success ? '成功' : '失败';
+                const detail = r.success ? (r.message || '-') : (r.error || '-');
+                html += `<tr>
+                    <td>${r.team_id}</td>
+                    <td>${escapeHtml(r.email)}</td>
+                    <td><span class="${statusClass}">${statusText}</span></td>
+                    <td class="detail-cell">${escapeHtml(detail)}</td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            tableDiv.innerHTML = html;
+        } else {
+            tableDiv.innerHTML = '<p style="text-align:center;color:var(--text-muted);padding:1rem;">无详细数据</p>';
+        }
+    }
+
+    function closeBatchResult() {
+        hideModal('batchResultModal');
+        location.reload();
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // === 单个 Team 操作 ===
+
+    async function refreshTeam(teamId) {
         try {
             showToast('正在刷新...', 'info');
-            const response = await fetch(`/api/teams/${teamId}/refresh`, {
-                method: 'GET'
-            });
-
+            const response = await fetch(`/api/teams/${teamId}/refresh`, { method: 'GET' });
             const data = await response.json();
 
             if (response.ok && data.success) {
@@ -163,24 +275,17 @@
         }
     }
 
-    async function refreshAllTeams() {
-        if (!confirm('确定要批量刷新所有 Team 的信息吗?\n\n这可能需要一些时间。')) {
-            return;
-        }
-
+    async function retryTeam(teamId) {
         try {
-            showToast('正在批量刷新，请稍候...', 'info');
-            const response = await fetch('/api/teams/refresh-all', {
-                method: 'GET'
-            });
-
+            showToast('正在重试...', 'info');
+            const response = await fetch(`/api/teams/${teamId}/refresh`, { method: 'GET' });
             const data = await response.json();
 
             if (response.ok && data.success) {
-                showToast(`刷新完成: 成功 ${data.success_count}/${data.total}`, 'success');
+                showToast('重试成功，Team 已恢复', 'success');
                 setTimeout(() => location.reload(), 1000);
             } else {
-                showToast(data.error || '批量刷新失败', 'error');
+                showToast(data.error || '重试失败', 'error');
             }
         } catch (error) {
             showToast('网络错误', 'error');
@@ -194,10 +299,7 @@
 
         try {
             showToast('正在删除...', 'info');
-            const response = await fetch(`/admin/teams/${teamId}/delete`, {
-                method: 'POST'
-            });
-
+            const response = await fetch(`/admin/teams/${teamId}/delete`, { method: 'POST' });
             const data = await response.json();
 
             if (response.ok && data.success) {
@@ -211,18 +313,76 @@
         }
     }
 
+    // === 批量操作 ===
+
+    async function refreshAllTeams() {
+        const btn = document.getElementById('refreshAllBtn');
+        if (btn) btn.disabled = true;
+
+        showBatchModal('批量刷新', '正在并发刷新所有 Team，请稍候...');
+
+        try {
+            const response = await fetch('/api/teams/refresh-all', { method: 'GET' });
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                showBatchResults(data);
+            } else {
+                document.getElementById('batchLoading').style.display = 'none';
+                document.getElementById('batchResultContent').style.display = 'block';
+                document.getElementById('batchSummary').innerHTML = `<p class="text-danger">${escapeHtml(data.error || '批量刷新失败')}</p>`;
+                document.getElementById('batchResultTable').innerHTML = '';
+            }
+        } catch (error) {
+            document.getElementById('batchLoading').style.display = 'none';
+            document.getElementById('batchResultContent').style.display = 'block';
+            document.getElementById('batchSummary').innerHTML = '<p class="text-danger">网络错误，请重试</p>';
+            document.getElementById('batchResultTable').innerHTML = '';
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
+    async function retryErrorTeams() {
+        const btn = document.getElementById('retryErrorBtn');
+        if (btn) btn.disabled = true;
+
+        showBatchModal('重试异常账号', '正在重试所有异常 Team，请稍候...');
+
+        try {
+            const response = await fetch('/api/teams/retry-errors', { method: 'POST' });
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                showBatchResults(data);
+            } else {
+                document.getElementById('batchLoading').style.display = 'none';
+                document.getElementById('batchResultContent').style.display = 'block';
+                document.getElementById('batchSummary').innerHTML = `<p class="text-danger">${escapeHtml(data.error || '重试失败')}</p>`;
+                document.getElementById('batchResultTable').innerHTML = '';
+            }
+        } catch (error) {
+            document.getElementById('batchLoading').style.display = 'none';
+            document.getElementById('batchResultContent').style.display = 'block';
+            document.getElementById('batchSummary').innerHTML = '<p class="text-danger">网络错误，请重试</p>';
+            document.getElementById('batchResultTable').innerHTML = '';
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
     async function deleteErrorTeams() {
-        const errorCount = document.querySelectorAll('.status-error').length;
+        const errorCount = {{ stats.error_teams }};
         if (!confirm(`确定要删除所有 ${errorCount} 个异常状态的 Team 吗?\n\n此操作不可恢复!`)) {
             return;
         }
 
+        const btn = document.getElementById('deleteErrorBtn');
+        if (btn) btn.disabled = true;
+
         try {
             showToast('正在删除异常账号...', 'info');
-            const response = await fetch('/admin/teams/error/delete-all', {
-                method: 'POST'
-            });
-
+            const response = await fetch('/admin/teams/error/delete-all', { method: 'POST' });
             const data = await response.json();
 
             if (response.ok && data.success) {
@@ -233,6 +393,8 @@
             }
         } catch (error) {
             showToast('网络错误', 'error');
+        } finally {
+            if (btn) btn.disabled = false;
         }
     }
 </script>

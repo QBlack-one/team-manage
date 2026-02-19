@@ -2,6 +2,7 @@
 Team 管理服务
 用于管理 Team 账号的导入、同步、成员管理等功能
 """
+import asyncio
 import logging
 from typing import Optional, Dict, Any, List
 from datetime import datetime
@@ -287,6 +288,134 @@ class TeamService:
                 "error": f"批量导入失败: {str(e)}"
             }
 
+    async def _sync_team_data(
+        self,
+        team: Team,
+        db_session: AsyncSession
+    ) -> Dict[str, Any]:
+        """
+        同步单个 Team 数据的内部方法 (不提交事务)
+        直接修改 team 对象属性,由调用方负责 commit
+
+        Args:
+            team: Team ORM 对象
+            db_session: 数据库会话 (用于初始化 HTTP 会话)
+
+        Returns:
+            结果字典,包含 success, message, error
+        """
+        try:
+            # 1. 解密 AT Token
+            try:
+                access_token = encryption_service.decrypt_token(team.access_token_encrypted)
+            except Exception as e:
+                logger.error(f"解密 Token 失败 (Team {team.id}): {e}")
+                team.status = "error"
+                team.error_message = f"解密 Token 失败: {str(e)}"
+                return {
+                    "success": False,
+                    "message": None,
+                    "error": team.error_message
+                }
+
+            # 2. 获取账户信息
+            account_result = await self.chatgpt_service.get_account_info(
+                access_token, db_session
+            )
+
+            if not account_result["success"]:
+                team.status = "error"
+                team.error_message = f"获取账户信息失败: {account_result['error']}"
+                return {
+                    "success": False,
+                    "message": None,
+                    "error": team.error_message
+                }
+
+            # 3. 查找当前使用的 account
+            team_accounts = account_result["accounts"]
+            current_account = None
+
+            for acc in team_accounts:
+                if acc["account_id"] == team.account_id:
+                    current_account = acc
+                    break
+
+            if not current_account:
+                for acc in team_accounts:
+                    if acc["has_active_subscription"]:
+                        current_account = acc
+                        break
+
+                if not current_account and team_accounts:
+                    current_account = team_accounts[0]
+
+            if not current_account:
+                team.status = "error"
+                team.error_message = "该 Token 没有关联任何 Team 账户"
+                return {
+                    "success": False,
+                    "message": None,
+                    "error": team.error_message
+                }
+
+            # 4. 获取成员列表
+            members_result = await self.chatgpt_service.get_members(
+                access_token,
+                current_account["account_id"],
+                db_session
+            )
+
+            current_members = 0
+            if members_result["success"]:
+                current_members = members_result["total"]
+
+            # 5. 解析过期时间
+            expires_at = None
+            if current_account["expires_at"]:
+                try:
+                    expires_at = datetime.fromisoformat(
+                        current_account["expires_at"].replace("+00:00", "")
+                    )
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"解析过期时间失败: {e}")
+
+            # 6. 确定状态
+            status = "active"
+            if current_members >= team.max_members:
+                status = "full"
+            elif expires_at and expires_at < datetime.now():
+                status = "expired"
+
+            # 7. 更新 Team 信息
+            team.account_id = current_account["account_id"]
+            team.team_name = current_account["name"]
+            team.plan_type = current_account["plan_type"]
+            team.subscription_plan = current_account["subscription_plan"]
+            team.expires_at = expires_at
+            team.current_members = current_members
+            team.status = status
+            team.error_message = None  # 成功时清除错误信息
+            team.last_sync = get_now()
+
+            logger.info(f"Team {team.id} 数据同步成功, 成员数 {current_members}")
+
+            return {
+                "success": True,
+                "message": f"同步成功,当前成员数: {current_members}",
+                "error": None
+            }
+
+        except Exception as e:
+            logger.error(f"Team {team.id} 数据同步失败: {e}")
+            team.status = "error"
+            team.error_message = f"同步失败: {str(e)}"
+            return {
+                "success": False,
+                "message": None,
+                "error": team.error_message
+            }
+
     async def sync_team_info(
         self,
         team_id: int,
@@ -303,7 +432,6 @@ class TeamService:
             结果字典,包含 success, message, error
         """
         try:
-            # 1. 查询 Team
             stmt = select(Team).where(Team.id == team_id)
             result = await db_session.execute(stmt)
             team = result.scalar_one_or_none()
@@ -315,111 +443,9 @@ class TeamService:
                     "error": f"Team ID {team_id} 不存在"
                 }
 
-            # 2. 解密 AT Token
-            try:
-                access_token = encryption_service.decrypt_token(team.access_token_encrypted)
-            except Exception as e:
-                logger.error(f"解密 Token 失败: {e}")
-                # 更新状态为 error
-                team.status = "error"
-                await db_session.commit()
-                return {
-                    "success": False,
-                    "message": None,
-                    "error": f"解密 Token 失败: {str(e)}"
-                }
-
-            # 3. 获取账户信息
-            account_result = await self.chatgpt_service.get_account_info(
-                access_token,
-                db_session
-            )
-
-            if not account_result["success"]:
-                # 更新状态为 error
-                team.status = "error"
-                await db_session.commit()
-                return {
-                    "success": False,
-                    "message": None,
-                    "error": f"获取账户信息失败: {account_result['error']}"
-                }
-
-            # 4. 查找当前使用的 account
-            team_accounts = account_result["accounts"]
-            current_account = None
-
-            for acc in team_accounts:
-                if acc["account_id"] == team.account_id:
-                    current_account = acc
-                    break
-
-            if not current_account:
-                # 如果当前 account_id 不存在,使用第一个活跃的
-                for acc in team_accounts:
-                    if acc["has_active_subscription"]:
-                        current_account = acc
-                        break
-
-                if not current_account and team_accounts:
-                    current_account = team_accounts[0]
-
-            if not current_account:
-                team.status = "error"
-                await db_session.commit()
-                return {
-                    "success": False,
-                    "message": None,
-                    "error": "该 Token 没有关联任何 Team 账户"
-                }
-
-            # 5. 获取成员列表
-            members_result = await self.chatgpt_service.get_members(
-                access_token,
-                current_account["account_id"],
-                db_session
-            )
-
-            current_members = 0
-            if members_result["success"]:
-                current_members = members_result["total"]
-
-            # 6. 解析过期时间
-            expires_at = None
-            if current_account["expires_at"]:
-                try:
-                    expires_at = datetime.fromisoformat(
-                        current_account["expires_at"].replace("+00:00", "")
-                    )
-                except Exception as e:
-                    logger.warning(f"解析过期时间失败: {e}")
-
-            # 7. 确定状态
-            status = "active"
-            if current_members >= 5:
-                status = "full"
-            elif expires_at and expires_at < datetime.now():
-                status = "expired"
-
-            # 8. 更新 Team 信息
-            team.account_id = current_account["account_id"]
-            team.team_name = current_account["name"]
-            team.plan_type = current_account["plan_type"]
-            team.subscription_plan = current_account["subscription_plan"]
-            team.expires_at = expires_at
-            team.current_members = current_members
-            team.status = status
-            team.last_sync = get_now()
-
+            sync_result = await self._sync_team_data(team, db_session)
             await db_session.commit()
-
-            logger.info(f"Team 同步成功: ID {team_id}, 成员数 {current_members}")
-
-            return {
-                "success": True,
-                "message": f"同步成功,当前成员数: {current_members}",
-                "error": None
-            }
+            return sync_result
 
         except Exception as e:
             await db_session.rollback()
@@ -435,7 +461,8 @@ class TeamService:
         db_session: AsyncSession
     ) -> Dict[str, Any]:
         """
-        同步所有 Team 的信息
+        并发同步所有 Team 的信息
+        分三阶段执行: 加载数据 -> 并发 HTTP 请求 -> 批量更新数据库
 
         Args:
             db_session: 数据库会话
@@ -444,7 +471,7 @@ class TeamService:
             结果字典,包含 success, total, success_count, failed_count, results
         """
         try:
-            # 1. 查询所有 Team
+            # 阶段 1: 加载所有 Team
             stmt = select(Team)
             result = await db_session.execute(stmt)
             teams = result.scalars().all()
@@ -459,26 +486,60 @@ class TeamService:
                     "error": None
                 }
 
-            # 2. 逐个同步
+            # 阶段 2: 确保 ChatGPT HTTP 会话已初始化 (需要从 DB 读取代理配置)
+            if not self.chatgpt_service.session:
+                self.chatgpt_service.session = await self.chatgpt_service._create_session(db_session)
+
+            # 阶段 3: 并发执行同步 (信号量限制并发数)
+            sem = asyncio.Semaphore(3)
+
+            async def sync_one(team: Team) -> Dict[str, Any]:
+                async with sem:
+                    return await self._sync_team_data(team, db_session)
+
+            sync_results = await asyncio.gather(
+                *[sync_one(t) for t in teams],
+                return_exceptions=True
+            )
+
+            # 阶段 4: 处理结果并批量提交
             results = []
             success_count = 0
             failed_count = 0
 
-            for team in teams:
-                result = await self.sync_team_info(team.id, db_session)
-
-                if result["success"]:
+            for team, sync_result in zip(teams, sync_results):
+                if isinstance(sync_result, Exception):
+                    # asyncio.gather 捕获的异常
+                    team.status = "error"
+                    team.error_message = f"同步异常: {str(sync_result)}"
+                    failed_count += 1
+                    results.append({
+                        "team_id": team.id,
+                        "email": team.email,
+                        "success": False,
+                        "message": None,
+                        "error": team.error_message
+                    })
+                elif sync_result["success"]:
                     success_count += 1
+                    results.append({
+                        "team_id": team.id,
+                        "email": team.email,
+                        "success": True,
+                        "message": sync_result["message"],
+                        "error": None
+                    })
                 else:
                     failed_count += 1
+                    results.append({
+                        "team_id": team.id,
+                        "email": team.email,
+                        "success": False,
+                        "message": None,
+                        "error": sync_result["error"]
+                    })
 
-                results.append({
-                    "team_id": team.id,
-                    "email": team.email,
-                    "success": result["success"],
-                    "message": result["message"],
-                    "error": result["error"]
-                })
+            await db_session.commit()
 
             logger.info(f"批量同步完成: 总数 {len(teams)}, 成功 {success_count}, 失败 {failed_count}")
 
@@ -492,6 +553,7 @@ class TeamService:
             }
 
         except Exception as e:
+            await db_session.rollback()
             logger.error(f"批量同步失败: {e}")
             return {
                 "success": False,
@@ -500,6 +562,112 @@ class TeamService:
                 "failed_count": 0,
                 "results": [],
                 "error": f"批量同步失败: {str(e)}"
+            }
+
+    async def retry_error_teams(
+        self,
+        db_session: AsyncSession
+    ) -> Dict[str, Any]:
+        """
+        重试所有异常状态的 Team (重新同步)
+
+        Args:
+            db_session: 数据库会话
+
+        Returns:
+            结果字典,包含 success, total, success_count, failed_count, results
+        """
+        try:
+            # 1. 查询所有 error 状态的 Team
+            stmt = select(Team).where(Team.status == "error")
+            result = await db_session.execute(stmt)
+            error_teams = result.scalars().all()
+
+            if not error_teams:
+                return {
+                    "success": True,
+                    "total": 0,
+                    "success_count": 0,
+                    "failed_count": 0,
+                    "results": [],
+                    "error": None
+                }
+
+            # 2. 确保 HTTP 会话已初始化
+            if not self.chatgpt_service.session:
+                self.chatgpt_service.session = await self.chatgpt_service._create_session(db_session)
+
+            # 3. 并发重试
+            sem = asyncio.Semaphore(3)
+
+            async def retry_one(team: Team) -> Dict[str, Any]:
+                async with sem:
+                    return await self._sync_team_data(team, db_session)
+
+            sync_results = await asyncio.gather(
+                *[retry_one(t) for t in error_teams],
+                return_exceptions=True
+            )
+
+            # 4. 处理结果
+            results = []
+            success_count = 0
+            failed_count = 0
+
+            for team, sync_result in zip(error_teams, sync_results):
+                if isinstance(sync_result, Exception):
+                    team.status = "error"
+                    team.error_message = f"重试异常: {str(sync_result)}"
+                    failed_count += 1
+                    results.append({
+                        "team_id": team.id,
+                        "email": team.email,
+                        "success": False,
+                        "message": None,
+                        "error": team.error_message
+                    })
+                elif sync_result["success"]:
+                    success_count += 1
+                    results.append({
+                        "team_id": team.id,
+                        "email": team.email,
+                        "success": True,
+                        "message": sync_result["message"],
+                        "error": None
+                    })
+                else:
+                    failed_count += 1
+                    results.append({
+                        "team_id": team.id,
+                        "email": team.email,
+                        "success": False,
+                        "message": None,
+                        "error": sync_result["error"]
+                    })
+
+            await db_session.commit()
+
+            logger.info(f"重试异常 Team 完成: 总数 {len(error_teams)}, 成功 {success_count}, 失败 {failed_count}")
+
+            return {
+                "success": True,
+                "total": len(error_teams),
+                "success_count": success_count,
+                "failed_count": failed_count,
+                "results": results,
+                "error": None
+            }
+
+        except Exception as e:
+            await db_session.rollback()
+            logger.error(f"重试异常 Team 失败: {e}")
+            return {
+                "success": False,
+                "total": 0,
+                "success_count": 0,
+                "failed_count": 0,
+                "results": [],
+                "error": f"重试失败: {str(e)}"
             }
 
     async def get_team_members(
@@ -1062,6 +1230,7 @@ class TeamService:
                     "current_members": team.current_members,
                     "max_members": team.max_members,
                     "status": team.status,
+                    "error_message": team.error_message,
                     "last_sync": team.last_sync.isoformat() if team.last_sync else None,
                     "created_at": team.created_at.isoformat() if team.created_at else None
                 })

@@ -11,15 +11,12 @@ from pydantic import BaseModel, Field
 
 from app.database import get_db
 from app.dependencies.auth import require_admin
-from app.services.team import TeamService
+from app.services.team import team_service
 
 logger = logging.getLogger(__name__)
 
 # 创建路由器
 router = APIRouter(tags=["admin-teams"])
-
-# 服务实例
-team_service = TeamService()
 
 
 # 请求模型

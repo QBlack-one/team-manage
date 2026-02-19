@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies.auth import require_admin
-from app.services.team import TeamService
+from app.services.team import team_service
 from app.services.redemption import RedemptionService
 
 # 导入子路由
@@ -30,7 +30,6 @@ router.include_router(admin_records.router)
 router.include_router(admin_settings.router)
 
 # 服务实例
-team_service = TeamService()
 redemption_service = RedemptionService()
 
 
@@ -65,9 +64,11 @@ async def admin_dashboard(
         all_codes = codes_result.get("codes", [])
 
         # 计算统计数据
+        error_teams = [t for t in teams if t["status"] == "error"]
         stats = {
             "total_teams": len(teams),
             "available_teams": len([t for t in teams if t["status"] == "active" and t["current_members"] < t["max_members"]]),
+            "error_teams": len(error_teams),
             "total_codes": len(all_codes),
             "used_codes": len([c for c in all_codes if c["status"] == "used"])
         }

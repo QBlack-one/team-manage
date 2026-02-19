@@ -4,7 +4,7 @@ SQLite 异步连接配置和会话管理
 """
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
-from sqlalchemy import event
+from sqlalchemy import event, text
 from app.config import settings
 
 # 创建异步引擎
@@ -56,10 +56,29 @@ async def get_db() -> AsyncSession:
 async def init_db():
     """
     初始化数据库
-    创建所有表
+    创建所有表，并执行必要的迁移
     """
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # 数据库迁移: 为已有表添加新字段
+        await _run_migrations(conn)
+
+
+async def _run_migrations(conn):
+    """
+    执行数据库迁移
+    为已有表安全地添加缺失的列
+    """
+    migrations = [
+        ("teams", "error_message", "TEXT"),
+    ]
+    for table, column, col_type in migrations:
+        try:
+            await conn.execute(text(
+                f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"
+            ))
+        except Exception:
+            pass  # 列已存在，忽略
 
 
 async def close_db():

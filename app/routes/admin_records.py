@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies.auth import require_admin
 from app.services.redemption import RedemptionService
-from app.services.team import TeamService
+from app.services.team import team_service
 from app.utils.time_utils import get_now
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,6 @@ router = APIRouter(tags=["admin-records"])
 
 # 服务实例
 redemption_service = RedemptionService()
-team_service = TeamService()
 
 
 @router.get("/records", response_class=HTMLResponse)

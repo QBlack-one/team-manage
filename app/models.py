@@ -25,6 +25,7 @@ class Team(Base):
     current_members = Column(Integer, default=0, comment="当前成员数")
     max_members = Column(Integer, default=5, comment="最大成员数")
     status = Column(String(20), default="active", comment="状态: active/full/expired/error")
+    error_message = Column(Text, comment="错误信息")
     last_sync = Column(DateTime, comment="最后同步时间")
     created_at = Column(DateTime, default=get_now, comment="创建时间")
 

@@ -8,8 +8,8 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies.auth import get_current_user
-from app.services.team import TeamService
+from app.dependencies.auth import require_admin
+from app.services.team import team_service
 
 logger = logging.getLogger(__name__)
 
@@ -19,16 +19,13 @@ router = APIRouter(
     tags=["api"]
 )
 
-# 服务实例
-team_service = TeamService()
-
 
 @router.get("/teams/refresh-all")
 async def refresh_all_teams(
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(require_admin)
 ):
-    """批量刷新所有 Team 信息"""
+    """批量刷新所有 Team 信息 (并发执行)"""
     try:
         logger.info("批量刷新所有 Team 信息")
         result = await team_service.sync_all_teams(db)
@@ -46,19 +43,9 @@ async def refresh_all_teams(
 async def refresh_team(
     team_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(require_admin)
 ):
-    """
-    刷新 Team 信息
-
-    Args:
-        team_id: Team ID
-        db: 数据库会话
-        current_user: 当前用户（需要登录）
-
-    Returns:
-        刷新结果
-    """
+    """刷新单个 Team 信息"""
     try:
         logger.info(f"刷新 Team {team_id} 信息")
 
@@ -80,4 +67,23 @@ async def refresh_team(
                 "success": False,
                 "error": f"刷新 Team 失败: {str(e)}"
             }
+        )
+
+
+@router.post("/teams/retry-errors")
+async def retry_error_teams(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_admin)
+):
+    """重试所有异常状态的 Team (重新同步)"""
+    try:
+        logger.info("重试所有异常 Team")
+        result = await team_service.retry_error_teams(db)
+        return JSONResponse(content=result)
+
+    except Exception as e:
+        logger.error(f"重试异常 Team 失败: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"success": False, "error": f"重试异常 Team 失败: {str(e)}"}
         )
