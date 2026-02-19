@@ -102,6 +102,11 @@ app.mount("/static", StaticFiles(directory=str(APP_DIR / "static")), name="stati
 # 配置模板引擎
 templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
 
+# 静态资源缓存破坏: 每次重启后浏览器/CDN都会重新请求静态文件
+import time
+STATIC_VERSION = str(int(time.time()))
+templates.env.globals["STATIC_VERSION"] = STATIC_VERSION
+
 # 添加模板过滤器
 def format_datetime(dt):
     """格式化日期时间"""
