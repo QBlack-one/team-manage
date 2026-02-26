@@ -1,6 +1,6 @@
 """
 使用记录路由
-处理兑换记录的查看和筛选
+查看 Team 和 Plus 的兑换记录
 """
 import logging
 import math
@@ -8,12 +8,12 @@ from typing import Optional
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import HTMLResponse
+from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies.auth import require_admin
-from app.services.redemption import RedemptionService
-from app.services.team import team_service
+from app.models import RedemptionCode
 from app.utils.time_utils import get_now
 
 logger = logging.getLogger(__name__)
@@ -21,8 +21,7 @@ logger = logging.getLogger(__name__)
 # 创建路由器
 router = APIRouter(tags=["admin-records"])
 
-# 服务实例
-redemption_service = RedemptionService()
+PER_PAGE = 20
 
 
 @router.get("/records", response_class=HTMLResponse)
@@ -30,115 +29,93 @@ async def records_page(
     request: Request,
     email: Optional[str] = None,
     code: Optional[str] = None,
-    team_id: Optional[str] = None,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
     page: Optional[str] = "1",
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(require_admin)
 ):
-    """使用记录页面"""
+    """使用记录页面 - 展示所有已使用的兑换码（Team + Plus）"""
     try:
         from app.main import templates
 
-        # 解析参数
-        try:
-            actual_team_id = int(team_id) if team_id and team_id.strip() else None
-        except (ValueError, TypeError):
-            actual_team_id = None
-
+        # 解析页码
         try:
             page_int = int(page) if page and page.strip() else 1
         except (ValueError, TypeError):
             page_int = 1
-
-        logger.info(f"管理员访问使用记录页面 (page={page_int})")
-
-        # 获取记录
-        records_result = await redemption_service.get_all_records(
-            db,
-            email=email,
-            code=code,
-            team_id=actual_team_id
-        )
-        all_records = records_result.get("records", [])
-
-        # 日期范围筛选
-        filtered_records = []
-        for record in all_records:
-            if start_date or end_date:
-                try:
-                    record_date = datetime.fromisoformat(record["redeemed_at"]).date()
-
-                    if start_date:
-                        start = datetime.strptime(start_date, "%Y-%m-%d").date()
-                        if record_date < start:
-                            continue
-
-                    if end_date:
-                        end = datetime.strptime(end_date, "%Y-%m-%d").date()
-                        if record_date > end:
-                            continue
-                except:
-                    pass
-
-            filtered_records.append(record)
-
-        # 获取Team信息
-        teams_result = await team_service.get_all_teams(db)
-        teams = teams_result.get("teams", [])
-        team_map = {team["id"]: team for team in teams}
-
-        for record in filtered_records:
-            team = team_map.get(record["team_id"])
-            record["team_name"] = team["team_name"] if team else None
-
-        # 计算统计数据
-        now = get_now()
-        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        week_start = today_start - timedelta(days=today_start.weekday())
-        month_start = today_start.replace(day=1)
-
-        stats = {
-            "total": len(filtered_records),
-            "today": 0,
-            "this_week": 0,
-            "this_month": 0
-        }
-
-        for record in filtered_records:
-            try:
-                record_time = datetime.fromisoformat(record["redeemed_at"])
-                if record_time >= today_start:
-                    stats["today"] += 1
-                if record_time >= week_start:
-                    stats["this_week"] += 1
-                if record_time >= month_start:
-                    stats["this_month"] += 1
-            except:
-                pass
-
-        # 分页
-        per_page = 20
-        total_records = len(filtered_records)
-        total_pages = math.ceil(total_records / per_page) if total_records > 0 else 1
-
         if page_int < 1:
             page_int = 1
+
+        # --- 构建筛选条件 ---
+        filters = [RedemptionCode.status == "used"]
+        if email and email.strip():
+            filters.append(RedemptionCode.used_by_email.ilike(f"%{email.strip()}%"))
+        if code and code.strip():
+            filters.append(RedemptionCode.code.ilike(f"%{code.strip()}%"))
+
+        where_clause = and_(*filters)
+
+        # --- 统计数据 ---
+        now = get_now()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        # 总数
+        total_stmt = select(func.count()).select_from(RedemptionCode).where(where_clause)
+        total_result = await db.execute(total_stmt)
+        total_records = total_result.scalar() or 0
+
+        # 今日
+        today_stmt = select(func.count()).select_from(RedemptionCode).where(
+            and_(where_clause, RedemptionCode.used_at >= today_start)
+        )
+        today_result = await db.execute(today_stmt)
+        today_count = today_result.scalar() or 0
+
+        # Team / Plus 分类统计
+        team_stmt = select(func.count()).select_from(RedemptionCode).where(
+            and_(where_clause, RedemptionCode.code_type == "team")
+        )
+        team_result = await db.execute(team_stmt)
+        team_count = team_result.scalar() or 0
+
+        plus_stmt = select(func.count()).select_from(RedemptionCode).where(
+            and_(where_clause, RedemptionCode.code_type == "plus")
+        )
+        plus_result = await db.execute(plus_stmt)
+        plus_count = plus_result.scalar() or 0
+
+        stats = {
+            "total": total_records,
+            "today": today_count,
+            "team_count": team_count,
+            "plus_count": plus_count
+        }
+
+        # --- 分页查询 ---
+        total_pages = math.ceil(total_records / PER_PAGE) if total_records > 0 else 1
         if page_int > total_pages:
             page_int = total_pages
 
-        start_idx = (page_int - 1) * per_page
-        end_idx = start_idx + per_page
-        paginated_records = filtered_records[start_idx:end_idx]
+        offset = (page_int - 1) * PER_PAGE
 
-        # 格式化时间
-        for record in paginated_records:
-            try:
-                dt = datetime.fromisoformat(record["redeemed_at"])
-                record["redeemed_at"] = dt.strftime("%Y-%m-%d %H:%M:%S")
-            except:
-                pass
+        records_stmt = (
+            select(RedemptionCode)
+            .where(where_clause)
+            .order_by(RedemptionCode.used_at.desc())
+            .limit(PER_PAGE)
+            .offset(offset)
+        )
+        records_result = await db.execute(records_stmt)
+        records = records_result.scalars().all()
+
+        # 格式化记录
+        record_list = []
+        for r in records:
+            record_list.append({
+                "email": r.used_by_email or "-",
+                "code": r.code,
+                "code_type": r.code_type or "team",
+                "used_at": r.used_at.strftime("%Y-%m-%d %H:%M:%S") if r.used_at else "-"
+            })
 
         return templates.TemplateResponse(
             "admin/records/index.html",
@@ -146,20 +123,17 @@ async def records_page(
                 "request": request,
                 "user": current_user,
                 "active_page": "records",
-                "records": paginated_records,
+                "records": record_list,
                 "stats": stats,
                 "filters": {
                     "email": email,
-                    "code": code,
-                    "team_id": team_id,
-                    "start_date": start_date,
-                    "end_date": end_date
+                    "code": code
                 },
                 "pagination": {
                     "current_page": page_int,
                     "total_pages": total_pages,
                     "total": total_records,
-                    "per_page": per_page
+                    "per_page": PER_PAGE
                 }
             }
         )
