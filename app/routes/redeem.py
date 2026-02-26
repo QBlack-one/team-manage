@@ -1,6 +1,6 @@
 """
 兑换路由
-处理用户兑换码验证和加入 Team 的请求
+处理用户兑换码验证和加入 Team / 获取 Plus 的请求
 """
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -30,6 +30,7 @@ class RedeemRequest(BaseModel):
     """兑换请求"""
     email: EmailStr = Field(..., description="用户邮箱")
     code: str = Field(..., description="兑换码", min_length=1)
+    redeem_type: str = Field("team", description="兑换类型: team 或 plus")
     team_id: Optional[int] = Field(None, description="Team ID (可选，不提供则自动选择)")
 
 
@@ -57,7 +58,9 @@ class RedeemResponse(BaseModel):
     """兑换响应"""
     success: bool
     message: Optional[str] = None
+    redeem_type: Optional[str] = None
     team_info: Optional[Dict[str, Any]] = None
+    plus_info: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
 
 
@@ -66,16 +69,7 @@ async def verify_code(
     request: VerifyCodeRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    验证兑换码并返回可用 Team 列表
-
-    Args:
-        request: 验证请求
-        db: 数据库会话
-
-    Returns:
-        验证结果和可用 Team 列表
-    """
+    """验证兑换码并返回可用 Team 列表"""
     try:
         logger.info(f"验证兑换码请求: {request.code}")
 
@@ -113,50 +107,60 @@ async def confirm_redeem(
     request: RedeemRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    确认兑换并加入 Team
-
-    Args:
-        request: 兑换请求
-        db: 数据库会话
-
-    Returns:
-        兑换结果
-    """
+    """确认兑换 - 支持 Team 和 Plus 两种类型"""
     try:
-        logger.info(f"兑换请求: {request.email} -> Team {request.team_id} (兑换码: {request.code})")
+        logger.info(f"兑换请求: {request.email} -> 类型: {request.redeem_type} (兑换码: {request.code})")
 
-        result = await redeem_flow_service.redeem_and_join_team(
-            request.email,
-            request.code,
-            request.team_id,
-            db
-        )
+        if request.redeem_type == "plus":
+            # Plus 兑换
+            result = await redeem_flow_service.redeem_plus(
+                request.email,
+                request.code,
+                db
+            )
 
-        if not result["success"]:
-            # 根据错误类型返回不同的状态码
-            if "不存在" in result["error"] or "已使用" in result["error"] or "已过期" in result["error"]:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=result["error"]
-                )
-            elif "已满" in result["error"]:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=result["error"]
-                )
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=result["error"]
-                )
+            if not result["success"]:
+                error_msg = result["error"]
+                if "不存在" in error_msg or "已使用" in error_msg or "已过期" in error_msg:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
+                elif "没有可用" in error_msg:
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=error_msg)
+                else:
+                    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_msg)
 
-        return RedeemResponse(
-            success=result["success"],
-            message=result["message"],
-            team_info=result["team_info"],
-            error=result["error"]
-        )
+            return RedeemResponse(
+                success=True,
+                message=result["message"],
+                redeem_type="plus",
+                plus_info=result["plus_info"],
+                error=None
+            )
+
+        else:
+            # Team 兑换 (默认)
+            result = await redeem_flow_service.redeem_and_join_team(
+                request.email,
+                request.code,
+                request.team_id,
+                db
+            )
+
+            if not result["success"]:
+                error_msg = result["error"]
+                if "不存在" in error_msg or "已使用" in error_msg or "已过期" in error_msg:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
+                elif "已满" in error_msg:
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=error_msg)
+                else:
+                    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_msg)
+
+            return RedeemResponse(
+                success=True,
+                message=result["message"],
+                redeem_type="team",
+                team_info=result["team_info"],
+                error=None
+            )
 
     except HTTPException:
         raise

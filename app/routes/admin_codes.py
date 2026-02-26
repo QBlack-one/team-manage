@@ -33,6 +33,7 @@ class CodeGenerateRequest(BaseModel):
     code: Optional[str] = Field(None, description="自定义兑换码 (单个生成)")
     count: Optional[int] = Field(None, description="生成数量 (批量生成)")
     expires_days: Optional[int] = Field(None, description="有效期天数")
+    code_type: str = Field("team", description="兑换码类型: team 或 plus")
 
 
 @router.get("/codes", response_class=HTMLResponse)
@@ -102,7 +103,8 @@ async def generate_codes(
             result = await redemption_service.generate_code_single(
                 db_session=db,
                 code=generate_data.code,
-                expires_days=generate_data.expires_days
+                expires_days=generate_data.expires_days,
+                code_type=generate_data.code_type
             )
 
             if not result["success"]:
@@ -122,7 +124,8 @@ async def generate_codes(
             result = await redemption_service.generate_code_batch(
                 db_session=db,
                 count=generate_data.count,
-                expires_days=generate_data.expires_days
+                expires_days=generate_data.expires_days,
+                code_type=generate_data.code_type
             )
 
             if not result["success"]:

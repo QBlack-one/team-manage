@@ -45,16 +45,12 @@ class PlusAccount(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     email = Column(String(255), nullable=False, comment="Plus 账号邮箱")
-    access_token_encrypted = Column(Text, nullable=False, comment="加密存储的 AT")
-    encryption_key_id = Column(String(50), comment="加密密钥 ID")
-    account_id = Column(String(100), comment="当前使用的 account-id")
-    account_name = Column(String(255), comment="Account 名称")
-    plan_type = Column(String(50), comment="计划类型")
-    subscription_plan = Column(String(100), comment="订阅计划")
-    expires_at = Column(DateTime, comment="订阅到期时间")
-    status = Column(String(20), default="active", comment="状态: active/expired/error")
-    error_message = Column(Text, comment="错误信息")
-    last_sync = Column(DateTime, comment="最后同步时间")
+    password = Column(String(255), nullable=False, comment="账号密码")
+    verify_url = Column(Text, comment="接码链接")
+    status = Column(String(20), default="unused", comment="状态: unused/used")
+    used_by_code = Column(String(32), comment="关联的兑换码")
+    used_by_email = Column(String(255), comment="使用者邮箱")
+    used_at = Column(DateTime, comment="分配时间")
     created_at = Column(DateTime, default=get_now, comment="创建时间")
 
     # 索引
@@ -89,11 +85,13 @@ class RedemptionCode(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     code = Column(String(32), unique=True, nullable=False, comment="兑换码")
+    code_type = Column(String(10), default="team", comment="类型: team/plus")
     status = Column(String(20), default="unused", comment="状态: unused/used/expired")
     created_at = Column(DateTime, default=get_now, comment="创建时间")
     expires_at = Column(DateTime, comment="过期时间")
     used_by_email = Column(String(255), comment="使用者邮箱")
     used_team_id = Column(Integer, ForeignKey("teams.id"), comment="使用的 Team ID")
+    used_plus_id = Column(Integer, ForeignKey("plus_accounts.id"), comment="关联的 Plus 账号 ID")
     used_at = Column(DateTime, comment="使用时间")
 
     # 关系

@@ -61,6 +61,7 @@
             <thead>
                 <tr>
                     <th>兑换码</th>
+                    <th>类型</th>
                     <th>状态</th>
                     <th>创建时间</th>
                     <th>过期时间</th>
@@ -77,6 +78,15 @@
                             <i data-lucide="ticket" style="width: 14px; height: 14px; color: var(--text-muted);"></i>
                             <code>{{ code.code }}</code>
                         </div>
+                    </td>
+                    <td>
+                        {% if code.code_type == 'plus' %}
+                        <span class="status-badge"
+                            style="background: rgba(168,85,247,0.15); color: #c084fc;">Plus</span>
+                        {% else %}
+                        <span class="status-badge"
+                            style="background: rgba(59,130,246,0.15); color: #60a5fa;">Team</span>
+                        {% endif %}
                     </td>
                     <td>
                         {% if code.status == 'unused' %}

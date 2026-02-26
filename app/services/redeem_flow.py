@@ -1,6 +1,6 @@
 """
 兑换流程服务
-协调用户兑换流程，包括验证、Team选择、邀请发送、事务处理和并发控制
+协调用户兑换流程，支持 Team 兑换和 Plus 兑换
 """
 import asyncio
 import logging
@@ -14,6 +14,7 @@ from app.services.redemption import RedemptionService
 from app.services.team import team_service as _team_service
 from app.services.chatgpt import ChatGPTService
 from app.services.encryption import encryption_service
+from app.services.plus import plus_service
 from app.utils.time_utils import get_now
 
 logger = logging.getLogger(__name__)
@@ -154,7 +155,7 @@ class RedeemFlowService:
         db_session: AsyncSession
     ) -> Dict[str, Any]:
         """
-        完整的兑换流程 (带事务和并发控制)
+        Team 兑换流程 (带事务和并发控制)
 
         Args:
             email: 用户邮箱
@@ -187,6 +188,15 @@ class RedeemFlowService:
                             "message": None,
                             "team_info": None,
                             "error": validate_result["reason"]
+                        }
+
+                    # 1.5 检查兑换码类型
+                    if validate_result.get("code_type", "team") != "team":
+                        return {
+                            "success": False,
+                            "message": None,
+                            "team_info": None,
+                            "error": "该兑换码为 Plus 类型，不能用于 Team 兑换"
                         }
 
                     # 2. 选择 Team (如果未指定则自动选择)
@@ -310,6 +320,101 @@ class RedeemFlowService:
                 "success": False,
                 "message": None,
                 "team_info": None,
+                "error": f"兑换失败: {str(e)}"
+            }
+
+    async def redeem_plus(
+        self,
+        email: str,
+        code: str,
+        db_session: AsyncSession
+    ) -> Dict[str, Any]:
+        """
+        Plus 兑换流程 (带事务和并发控制)
+
+        Args:
+            email: 使用者邮箱
+            code: 兑换码
+            db_session: 数据库会话
+
+        Returns:
+            结果字典,包含 success, message, plus_info, error
+        """
+        try:
+            async with _redeem_lock:
+                async with db_session.begin_nested():
+                    # 1. 验证兑换码
+                    validate_result = await self.redemption_service.validate_code(code, db_session)
+
+                    if not validate_result["success"]:
+                        return {
+                            "success": False,
+                            "message": None,
+                            "plus_info": None,
+                            "error": validate_result["error"]
+                        }
+
+                    if not validate_result["valid"]:
+                        return {
+                            "success": False,
+                            "message": None,
+                            "plus_info": None,
+                            "error": validate_result["reason"]
+                        }
+
+                    # 1.5 检查兑换码类型
+                    if validate_result.get("code_type", "team") != "plus":
+                        return {
+                            "success": False,
+                            "message": None,
+                            "plus_info": None,
+                            "error": "该兑换码为 Team 类型，不能用于 Plus 兑换"
+                        }
+
+                    # 2. 分配 Plus 账号
+                    allocate_result = await plus_service.allocate_plus(
+                        code=code,
+                        user_email=email,
+                        db_session=db_session
+                    )
+
+                    if not allocate_result["success"]:
+                        return {
+                            "success": False,
+                            "message": None,
+                            "plus_info": None,
+                            "error": allocate_result["error"]
+                        }
+
+                    # 3. 更新兑换码状态
+                    stmt = select(RedemptionCode).where(RedemptionCode.code == code)
+                    result = await db_session.execute(stmt)
+                    redemption_code = result.scalar_one_or_none()
+
+                    redemption_code.status = "used"
+                    redemption_code.used_by_email = email
+                    redemption_code.used_plus_id = allocate_result["plus_id"]
+                    redemption_code.used_at = get_now()
+
+                    # 提交事务
+                    await db_session.commit()
+
+                    logger.info(f"Plus 兑换成功: {email} -> Plus {allocate_result['plus_id']} (兑换码: {code})")
+
+                    return {
+                        "success": True,
+                        "message": "Plus 账号兑换成功",
+                        "plus_info": allocate_result["plus_info"],
+                        "error": None
+                    }
+
+        except Exception as e:
+            await db_session.rollback()
+            logger.error(f"Plus 兑换流程失败: {e}")
+            return {
+                "success": False,
+                "message": None,
+                "plus_info": None,
                 "error": f"兑换失败: {str(e)}"
             }
 

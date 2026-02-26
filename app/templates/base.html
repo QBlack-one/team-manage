@@ -159,21 +159,19 @@
                 <div id="singlePlusImport" class="import-panel">
                     <form id="singlePlusImportForm" onsubmit="handleSinglePlusImport(event)">
                         <div class="form-group">
-                            <label>Access Token (AT) <span class="required">*</span></label>
-                            <textarea name="accessToken" class="form-control" rows="4"
-                                placeholder="eyJhbGciOiJSUzI1Ni..." required></textarea>
-                            <small class="form-text">必填项，以 eyJ 开头的 JWT Token</small>
+                            <label>邮箱 <span class="required">*</span></label>
+                            <input type="email" name="email" class="form-control" placeholder="user@example.com"
+                                required>
                         </div>
                         <div class="form-group">
-                            <label>邮箱</label>
-                            <input type="email" name="email" class="form-control" placeholder="user@example.com">
-                            <small class="form-text">可选，如果不填写将从 Token 中自动提取</small>
+                            <label>密码 <span class="required">*</span></label>
+                            <input type="text" name="password" class="form-control" placeholder="账号密码" required>
                         </div>
                         <div class="form-group">
-                            <label>Account ID</label>
-                            <input type="text" name="accountId" class="form-control"
-                                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
-                            <small class="form-text">可选，如果不填写将从 API 自动获取</small>
+                            <label>接码链接</label>
+                            <input type="text" name="verifyUrl" class="form-control"
+                                placeholder="https://example.com/verify?email=xxx">
+                            <small class="form-text">可选</small>
                         </div>
                         <button type="submit" class="btn btn-primary">导入</button>
                     </form>
@@ -183,8 +181,10 @@
                     <form id="batchPlusImportForm" onsubmit="handleBatchPlusImport(event)">
                         <div class="form-group">
                             <label>批量导入内容 <span class="required">*</span></label>
-                            <textarea name="batchContent" class="form-control" rows="8" placeholder="一行一个 AT Token..."
+                            <textarea name="batchContent" class="form-control" rows="8"
+                                placeholder="直接从 Excel 粘贴即可，或使用 ---- 分隔：&#10;邮箱----密码----接码链接&#10;&#10;支持以下格式:&#10;• Excel 粘贴 (Tab分隔，自动跳过序号列)&#10;• 每行: 邮箱----密码----接码链接"
                                 required></textarea>
+                            <small class="form-text">支持直接从 Excel 粘贴（Tab分隔），也支持 ---- 分隔。接码链接可省略</small>
                         </div>
                         <div id="batchPlusResultsContainer" style="display: none; margin-bottom: 1rem;">
                             <h4>导入结果</h4>
@@ -215,6 +215,13 @@
                 <div id="singleGenerate" class="card-body">
                     <form onsubmit="generateSingle(event)">
                         <div class="form-group">
+                            <label>兑换码类型 <span class="required">*</span></label>
+                            <select name="codeType" class="form-control">
+                                <option value="team">Team</option>
+                                <option value="plus">Plus</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
                             <label>自定义兑换码 (可选)</label>
                             <input type="text" name="customCode" class="form-control" placeholder="留空则自动生成"
                                 maxlength="32">
@@ -237,6 +244,13 @@
 
                 <div id="batchGenerate" class="card-body" style="display: none;">
                     <form onsubmit="generateBatch(event)">
+                        <div class="form-group">
+                            <label>兑换码类型 <span class="required">*</span></label>
+                            <select name="codeType" class="form-control">
+                                <option value="team">Team</option>
+                                <option value="plus">Plus</option>
+                            </select>
+                        </div>
                         <div class="form-group">
                             <label>生成数量 *</label>
                             <input type="number" name="count" class="form-control" placeholder="请输入生成数量" min="1"

@@ -51,7 +51,8 @@ class RedemptionService:
         self,
         db_session: AsyncSession,
         code: Optional[str] = None,
-        expires_days: Optional[int] = None
+        expires_days: Optional[int] = None,
+        code_type: str = "team"
     ) -> Dict[str, Any]:
         """
         生成单个兑换码
@@ -108,6 +109,7 @@ class RedemptionService:
             # 3. 创建兑换码记录
             redemption_code = RedemptionCode(
                 code=code,
+                code_type=code_type,
                 status="unused",
                 expires_at=expires_at
             )
@@ -138,7 +140,8 @@ class RedemptionService:
         self,
         db_session: AsyncSession,
         count: int,
-        expires_days: Optional[int] = None
+        expires_days: Optional[int] = None,
+        code_type: str = "team"
     ) -> Dict[str, Any]:
         """
         批量生成兑换码
@@ -191,6 +194,7 @@ class RedemptionService:
             for code in codes:
                 redemption_code = RedemptionCode(
                     code=code,
+                    code_type=code_type,
                     status="unused",
                     expires_at=expires_at
                 )
@@ -280,6 +284,7 @@ class RedemptionService:
                 "success": True,
                 "valid": True,
                 "reason": "兑换码有效",
+                "code_type": redemption_code.code_type or "team",
                 "redemption_code": {
                     "id": redemption_code.id,
                     "code": redemption_code.code,
@@ -401,6 +406,7 @@ class RedemptionService:
                 code_list.append({
                     "id": code.id,
                     "code": code.code,
+                    "code_type": code.code_type or "team",
                     "status": code.status,
                     "created_at": code.created_at.isoformat() if code.created_at else None,
                     "expires_at": code.expires_at.isoformat() if code.expires_at else None,

@@ -16,8 +16,7 @@ function escapeHtml(unsafe) {
 // 全局变量
 let currentEmail = '';
 let currentCode = '';
-let availableTeams = [];
-let selectedTeamId = null;
+let selectedRedeemType = 'team'; // 默认 team
 
 // Toast提示函数
 function showToast(message, type = 'info') {
@@ -51,7 +50,43 @@ function showStep(stepNumber) {
 // 返回步骤1
 function backToStep1() {
     showStep(1);
-    selectedTeamId = null;
+}
+
+// 选择兑换类型
+function selectType(type) {
+    selectedRedeemType = type;
+    const teamBtn = document.getElementById('typeTeamBtn');
+    const plusBtn = document.getElementById('typePlusBtn');
+    const emailHelp = document.getElementById('emailHelp');
+
+    if (type === 'team') {
+        teamBtn.classList.add('active');
+        plusBtn.classList.remove('active');
+        emailHelp.textContent = '请使用您的常用邮箱,邀请将发送到此邮箱';
+    } else {
+        teamBtn.classList.remove('active');
+        plusBtn.classList.add('active');
+        emailHelp.textContent = '请输入您的邮箱以关联兑换记录';
+    }
+
+    if (window.lucide) lucide.createIcons();
+}
+
+// 复制文本到剪贴板
+async function copyToClipboard(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        showToast('已复制到剪贴板', 'success');
+    } catch (e) {
+        // fallback
+        const input = document.createElement('input');
+        input.value = text;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+        showToast('已复制到剪贴板', 'success');
+    }
 }
 
 // 步骤1: 验证兑换码并直接兑换
@@ -76,77 +111,17 @@ document.getElementById('verifyForm').addEventListener('submit', async (e) => {
     verifyBtn.disabled = true;
     verifyBtn.textContent = '正在兑换...';
 
-    // 直接调用兑换接口 (team_id = null 表示自动选择)
-    await confirmRedeem(null);
+    // 调用兑换接口
+    await confirmRedeem();
 
-    // 恢复按钮状态 (如果 confirmRedeem 失败并显示了错误也没关系，因为用户可以点返回重试)
+    // 恢复按钮状态
     verifyBtn.disabled = false;
-    verifyBtn.textContent = '验证兑换码';
+    verifyBtn.innerHTML = '<i data-lucide="shield-check"></i> 立即兑换';
+    if (window.lucide) lucide.createIcons();
 });
 
-// 渲染Team列表
-function renderTeamsList() {
-    const teamsList = document.getElementById('teamsList');
-    teamsList.innerHTML = '';
-
-    availableTeams.forEach(team => {
-        const teamCard = document.createElement('div');
-        teamCard.className = 'team-card';
-        teamCard.onclick = () => selectTeam(team.id);
-
-        const planBadge = team.subscription_plan === 'Plus' ? 'badge-plus' : 'badge-pro';
-
-        teamCard.innerHTML = `
-            <div class="team-name">${escapeHtml(team.team_name) || 'Team ' + team.id}</div>
-            <div class="team-info">
-                <div class="team-info-item">
-                    <i data-lucide="users" style="width: 14px; height: 14px;"></i>
-                    <span>${team.current_members}/${team.max_members} 成员</span>
-                </div>
-                <div class="team-info-item">
-                    <span class="team-badge ${planBadge}">${escapeHtml(team.subscription_plan) || 'Plus'}</span>
-                </div>
-                ${team.expires_at ? `
-                <div class="team-info-item">
-                    <i data-lucide="calendar" style="width: 14px; height: 14px;"></i>
-                    <span>到期: ${formatDate(team.expires_at)}</span>
-                </div>
-                ` : ''}
-            </div>
-        `;
-
-        teamsList.appendChild(teamCard);
-        if (window.lucide) lucide.createIcons();
-    });
-}
-
-// 选择Team
-function selectTeam(teamId) {
-    selectedTeamId = teamId;
-
-    // 更新UI
-    document.querySelectorAll('.team-card').forEach(card => {
-        card.classList.remove('selected');
-    });
-    event.currentTarget.classList.add('selected');
-
-    // 立即确认兑换
-    confirmRedeem(teamId);
-}
-
-// 自动选择Team
-function autoSelectTeam() {
-    if (availableTeams.length === 0) {
-        showToast('没有可用的 Team', 'error');
-        return;
-    }
-
-    // 自动选择第一个Team(后端会按过期时间排序)
-    confirmRedeem(null);
-}
-
 // 确认兑换
-async function confirmRedeem(teamId) {
+async function confirmRedeem() {
     try {
         const response = await fetch('/redeem/confirm', {
             method: 'POST',
@@ -156,18 +131,20 @@ async function confirmRedeem(teamId) {
             body: JSON.stringify({
                 email: currentEmail,
                 code: currentCode,
-                team_id: teamId
+                redeem_type: selectedRedeemType,
+                team_id: null
             })
         });
 
         const data = await response.json();
 
         if (response.ok && data.success) {
-            // 兑换成功
-            showSuccessResult(data);
+            if (data.redeem_type === 'plus') {
+                showPlusResult(data);
+            } else {
+                showTeamResult(data);
+            }
         } else {
-            // 兑换失败
-            // 处理 FastAPI 的 HTTPException (detail) 和自定义错误响应 (error)
             const errorMessage = data.detail || data.error || '兑换失败';
             showErrorResult(errorMessage);
         }
@@ -176,8 +153,8 @@ async function confirmRedeem(teamId) {
     }
 }
 
-// 显示成功结果
-function showSuccessResult(data) {
+// 显示 Team 兑换结果
+function showTeamResult(data) {
     const resultContent = document.getElementById('resultContent');
     const teamInfo = data.team_info || {};
 
@@ -214,7 +191,56 @@ function showSuccessResult(data) {
         </div>
     `;
     if (window.lucide) lucide.createIcons();
+    showStep(3);
+}
 
+// 显示 Plus 兑换结果
+function showPlusResult(data) {
+    const resultContent = document.getElementById('resultContent');
+    const plusInfo = data.plus_info || {};
+
+    resultContent.innerHTML = `
+        <div class="result-success">
+            <div class="result-icon"><i data-lucide="check-circle" style="width: 64px; height: 64px; color: var(--success);"></i></div>
+            <div class="result-title">兑换成功!</div>
+            <div class="result-message">您的 Plus 账号信息如下</div>
+
+            <div class="plus-info-card">
+                <div class="plus-info-item">
+                    <span class="plus-info-label">账号</span>
+                    <span class="plus-info-value">
+                        ${escapeHtml(plusInfo.email)}
+                        <button class="copy-btn" onclick="copyToClipboard('${escapeHtml(plusInfo.email)}')">复制</button>
+                    </span>
+                </div>
+                <div class="plus-info-item">
+                    <span class="plus-info-label">密码</span>
+                    <span class="plus-info-value">
+                        ${escapeHtml(plusInfo.password)}
+                        <button class="copy-btn" onclick="copyToClipboard('${escapeHtml(plusInfo.password)}')">复制</button>
+                    </span>
+                </div>
+                ${plusInfo.verify_url ? `
+                <div class="plus-info-item">
+                    <span class="plus-info-label">接码链接</span>
+                    <span class="plus-info-value">
+                        <a href="${escapeHtml(plusInfo.verify_url)}" target="_blank">${escapeHtml(plusInfo.verify_url)}</a>
+                        <button class="copy-btn" onclick="copyToClipboard('${escapeHtml(plusInfo.verify_url)}')">复制</button>
+                    </span>
+                </div>
+                ` : ''}
+            </div>
+
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 2rem; background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 8px;">
+                ⚠️ 请立即保存以上信息！关闭页面后无法再次查看。
+            </p>
+
+            <button onclick="location.reload()" class="btn btn-primary">
+                <i data-lucide="refresh-cw"></i> 再次兑换
+            </button>
+        </div>
+    `;
+    if (window.lucide) lucide.createIcons();
     showStep(3);
 }
 

@@ -23,9 +23,9 @@ router = APIRouter(tags=["admin-plus"])
 class PlusImportRequest(BaseModel):
     """Plus 导入请求"""
     import_type: str = Field(..., description="导入类型: single 或 batch")
-    access_token: Optional[str] = Field(None, description="AT Token (单个导入)")
     email: Optional[str] = Field(None, description="邮箱 (单个导入)")
-    account_id: Optional[str] = Field(None, description="Account ID (单个导入)")
+    password: Optional[str] = Field(None, description="密码 (单个导入)")
+    verify_url: Optional[str] = Field(None, description="接码链接 (单个导入)")
     content: Optional[str] = Field(None, description="批量导入内容")
 
 
@@ -41,16 +41,13 @@ async def plus_list_page(
 
         logger.info("管理员访问 Plus 管理页面")
 
-        # 获取所有 Plus 账号列表
         plus_result = await plus_service.get_all_plus(db)
         accounts = plus_result.get("accounts", [])
 
-        # 计算统计数据
         stats = {
             "total": len(accounts),
-            "active": len([a for a in accounts if a["status"] == "active"]),
-            "expired": len([a for a in accounts if a["status"] == "expired"]),
-            "error": len([a for a in accounts if a["status"] == "error"]),
+            "unused": len([a for a in accounts if a["status"] == "unused"]),
+            "used": len([a for a in accounts if a["status"] == "used"]),
         }
 
         return templates.TemplateResponse(
@@ -72,57 +69,6 @@ async def plus_list_page(
         )
 
 
-@router.post("/plus/error/delete-all")
-async def delete_error_plus(
-    db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(require_admin)
-):
-    """批量删除所有异常状态的 Plus 账号"""
-    try:
-        logger.info("管理员批量删除异常 Plus")
-        result = await plus_service.delete_error_plus(db)
-
-        if not result["success"]:
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content=result
-            )
-        return JSONResponse(content=result)
-
-    except Exception as e:
-        logger.error(f"批量删除异常 Plus 失败: {e}")
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"success": False, "error": f"批量删除异常 Plus 失败: {str(e)}"}
-        )
-
-
-@router.post("/plus/{plus_id}/delete")
-async def delete_plus(
-    plus_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(require_admin)
-):
-    """删除 Plus 账号"""
-    try:
-        logger.info(f"管理员删除 Plus: {plus_id}")
-        result = await plus_service.delete_plus(plus_id, db)
-
-        if not result["success"]:
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content=result
-            )
-        return JSONResponse(content=result)
-
-    except Exception as e:
-        logger.error(f"删除 Plus 失败: {e}")
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"success": False, "error": f"删除 Plus 失败: {str(e)}"}
-        )
-
-
 @router.post("/plus/import")
 async def plus_import(
     import_data: PlusImportRequest,
@@ -134,17 +80,17 @@ async def plus_import(
         logger.info(f"管理员导入 Plus: {import_data.import_type}")
 
         if import_data.import_type == "single":
-            if not import_data.access_token:
+            if not import_data.email or not import_data.password:
                 return JSONResponse(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    content={"success": False, "error": "Access Token 不能为空"}
+                    content={"success": False, "error": "邮箱和密码不能为空"}
                 )
 
             result = await plus_service.import_plus_single(
-                access_token=import_data.access_token,
-                db_session=db,
                 email=import_data.email,
-                account_id=import_data.account_id
+                password=import_data.password,
+                db_session=db,
+                verify_url=import_data.verify_url
             )
 
             if not result["success"]:
@@ -178,4 +124,55 @@ async def plus_import(
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"success": False, "error": f"导入失败: {str(e)}"}
+        )
+
+
+@router.post("/plus/{plus_id}/delete")
+async def delete_plus(
+    plus_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_admin)
+):
+    """删除 Plus 账号"""
+    try:
+        logger.info(f"管理员删除 Plus: {plus_id}")
+        result = await plus_service.delete_plus(plus_id, db)
+
+        if not result["success"]:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content=result
+            )
+        return JSONResponse(content=result)
+
+    except Exception as e:
+        logger.error(f"删除 Plus 失败: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"success": False, "error": f"删除 Plus 失败: {str(e)}"}
+        )
+
+
+@router.post("/plus/used/delete-all")
+async def delete_used_plus(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_admin)
+):
+    """批量删除所有已使用的 Plus 账号"""
+    try:
+        logger.info("管理员批量删除已使用 Plus")
+        result = await plus_service.delete_used_plus(db)
+
+        if not result["success"]:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content=result
+            )
+        return JSONResponse(content=result)
+
+    except Exception as e:
+        logger.error(f"批量删除已使用 Plus 失败: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"success": False, "error": f"批量删除失败: {str(e)}"}
         )

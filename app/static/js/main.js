@@ -264,9 +264,9 @@ async function handleBatchImport(event) {
 async function handleSinglePlusImport(event) {
     event.preventDefault();
     const form = event.target;
-    const accessToken = form.accessToken.value.trim();
     const email = form.email.value.trim();
-    const accountId = form.accountId.value.trim();
+    const password = form.password.value.trim();
+    const verifyUrl = form.verifyUrl.value.trim();
     const submitButton = form.querySelector('button[type="submit"]');
 
     submitButton.disabled = true;
@@ -277,9 +277,9 @@ async function handleSinglePlusImport(event) {
             method: 'POST',
             body: JSON.stringify({
                 import_type: 'single',
-                access_token: accessToken,
-                email: email || null,
-                account_id: accountId || null
+                email: email,
+                password: password,
+                verify_url: verifyUrl || null
             })
         });
 
@@ -363,8 +363,9 @@ async function generateSingle(event) {
     const form = event.target;
     const customCode = form.customCode.value.trim();
     const expiresDays = form.expiresDays.value;
+    const codeType = form.codeType.value;
 
-    const data = { type: 'single' };
+    const data = { type: 'single', code_type: codeType };
     if (customCode) data.code = customCode;
     if (expiresDays) data.expires_days = parseInt(expiresDays);
 
@@ -392,13 +393,14 @@ async function generateBatch(event) {
     const form = event.target;
     const count = parseInt(form.count.value);
     const expiresDays = form.expiresDays.value;
+    const codeType = form.codeType.value;
 
     if (count < 1 || count > 1000) {
         showToast('生成数量必须在1-1000之间', 'error');
         return;
     }
 
-    const data = { type: 'batch', count: count };
+    const data = { type: 'batch', count: count, code_type: codeType };
     if (expiresDays) data.expires_days = parseInt(expiresDays);
 
     const result = await apiCall('/admin/codes/generate', {
