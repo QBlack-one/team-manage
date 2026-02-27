@@ -28,17 +28,26 @@ class ChatGPTService:
 
     async def _get_proxy_config(self, db_session: DBAsyncSession) -> Optional[str]:
         """
-        获取代理配置
+        获取代理配置（支持代理池随机分配）
 
         Args:
             db_session: 数据库会话
 
         Returns:
-            代理地址,如果未启用则返回 None
+            单个代理地址,如果未启用则返回 None
         """
+        import random
         proxy_config = await settings_service.get_proxy_config(db_session)
         if proxy_config["enabled"] and proxy_config["proxy"]:
-            return proxy_config["proxy"]
+            # 支持以换行符或逗号分隔的多个代理
+            proxies = [
+                p.strip() 
+                for p in proxy_config["proxy"].replace(',', '\n').split('\n') 
+                if p.strip()
+            ]
+            if proxies:
+                selected_proxy = random.choice(proxies)
+                return selected_proxy
         return None
 
     async def _create_session(self, db_session: DBAsyncSession) -> AsyncSession:
@@ -85,12 +94,12 @@ class ChatGPTService:
         Returns:
             响应数据字典,包含 success, status_code, data, error
         """
-        # 创建会话
-        if not self.session:
-            self.session = await self._create_session(db_session)
-
         # 重试循环
         for attempt in range(self.MAX_RETRIES):
+            # 创建会话（如果前期代理报错则清理了session，这里会重建并随机分配新代理）
+            if not self.session:
+                self.session = await self._create_session(db_session)
+
             try:
                 logger.info(f"发送请求: {method} {url} (尝试 {attempt + 1}/{self.MAX_RETRIES})")
 
@@ -145,7 +154,10 @@ class ChatGPTService:
                     # 如果不是最后一次尝试,等待后重试
                     if attempt < self.MAX_RETRIES - 1:
                         delay = self.RETRY_DELAYS[attempt]
-                        logger.info(f"等待 {delay}s 后重试")
+                        logger.info(f"等待 {delay}s 后换代理重试")
+                        if self.session:
+                            await self.session.close()
+                            self.session = None
                         await asyncio.sleep(delay)
                         continue
 
@@ -163,7 +175,10 @@ class ChatGPTService:
                 # 如果不是最后一次尝试,等待后重试
                 if attempt < self.MAX_RETRIES - 1:
                     delay = self.RETRY_DELAYS[attempt]
-                    logger.info(f"等待 {delay}s 后重试")
+                    logger.info(f"等待 {delay}s 后换代理重试")
+                    if self.session:
+                        await self.session.close()
+                        self.session = None
                     await asyncio.sleep(delay)
                     continue
 
@@ -181,7 +196,10 @@ class ChatGPTService:
                 # 如果不是最后一次尝试,等待后重试
                 if attempt < self.MAX_RETRIES - 1:
                     delay = self.RETRY_DELAYS[attempt]
-                    logger.info(f"等待 {delay}s 后重试")
+                    logger.info(f"等待 {delay}s 后换代理重试")
+                    if self.session:
+                        await self.session.close()
+                        self.session = None
                     await asyncio.sleep(delay)
                     continue
 
@@ -472,14 +490,14 @@ class ChatGPTService:
 
         # 提取所有 Team 类型的账户
         team_accounts = []
-        for account_id, account_info in accounts_data.items():
-            account = account_info.get("account", {})
-            entitlement = account_info.get("entitlement", {})
+        for account_id, account_info in (accounts_data or {}).items():
+            account = account_info.get("account") or {}
+            entitlement = account_info.get("entitlement") or {}
 
             # 只保留 Team 类型的账户
             if account.get("plan_type") == "team":
                 # 尝试从多个位置提取座位数上限
-                last_sub = account_info.get("last_active_subscription", {})
+                last_sub = account_info.get("last_active_subscription") or {}
                 max_seats = (
                     last_sub.get("quantity")
                     or last_sub.get("max_seats")
@@ -546,9 +564,9 @@ class ChatGPTService:
         # 提取所有非 Team 类型的账户 (Plus/Pro 等)
         plus_accounts = []
         all_plan_types = []
-        for account_id, account_info in accounts_data.items():
-            account = account_info.get("account", {})
-            entitlement = account_info.get("entitlement", {})
+        for account_id, account_info in (accounts_data or {}).items():
+            account = account_info.get("account") or {}
+            entitlement = account_info.get("entitlement") or {}
             plan_type = account.get("plan_type", "")
             all_plan_types.append(plan_type)
 

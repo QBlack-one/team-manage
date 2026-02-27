@@ -39,3 +39,6 @@ xlsxwriter>=3.1.9
 
 # Rate Limiting
 slowapi>=0.1.9
+
+# Scheduler
+apscheduler>=3.10.0

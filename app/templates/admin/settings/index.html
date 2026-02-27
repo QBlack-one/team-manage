@@ -24,12 +24,23 @@
 
         <div class="form-group">
             <label for="proxyUrl">代理地址</label>
-            <input type="text" id="proxyUrl" name="proxy" value="{{ proxy or '' }}"
-                placeholder="http://127.0.0.1:7890 或 socks5://127.0.0.1:1080" class="form-control">
-            <p class="form-help">支持HTTP和SOCKS5代理,格式: http://host:port 或 socks5://host:port</p>
+            <textarea id="proxyUrl" name="proxy" class="form-control" rows="4"
+                placeholder="http://127.0.0.1:7890&#10;socks5://127.0.0.1:1080">{{ proxy or '' }}</textarea>
+            <p class="form-help">支持构建代理池（每行一个）。格式: http://host:port 或 socks5://host:port</p>
         </div>
 
-        <button type="submit" class="btn btn-primary">保存代理配置</button>
+        <div style="display: flex; gap: 10px; margin-bottom: 5px;">
+            <button type="submit" class="btn btn-primary">保存代理配置</button>
+            <button type="button" id="testProxiesBtn" class="btn btn-secondary">检测代理有效性</button>
+        </div>
+
+        <!-- 检测结果展示容器 -->
+        <div id="proxyTestResults"
+            style="display: none; margin-top: 15px; padding: 15px; background: var(--bg-secondary); border-radius: var(--border-radius);">
+            <h4 style="margin-top:0; margin-bottom: 10px; font-size: 0.95rem;">检测结果:</h4>
+            <ul id="proxyTestList" style="list-style: none; padding-left: 0; margin-bottom: 0; font-size: 0.875rem;">
+            </ul>
+        </div>
     </form>
 </div>
 
@@ -85,6 +96,61 @@
         <button type="submit" class="btn btn-primary">保存日志级别</button>
     </form>
 </div>
+
+<!-- 定时任务 -->
+<div class="content-section">
+    <div class="section-header">
+        <h3>定时任务</h3>
+        <span id="schedulerStatusBadge" class="status-badge" style="font-size:0.8rem;">加载中...</span>
+    </div>
+
+    <form id="schedulerForm" class="settings-form">
+        <div class="form-group">
+            <label class="checkbox-label">
+                <input type="checkbox" id="syncEnabled" name="sync_enabled" checked>
+                <span>启用 Team 自动同步</span>
+            </label>
+            <p class="form-help">定时同步所有 Team 的状态和成员信息</p>
+        </div>
+
+        <div class="form-group">
+            <label for="syncHours">同步间隔（小时）</label>
+            <input type="number" id="syncHours" name="sync_hours" class="form-control" value="6" min="1" max="168"
+                style="max-width:120px;">
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-label">
+                <input type="checkbox" id="backupEnabled" name="backup_enabled" checked>
+                <span>启用自动备份</span>
+            </label>
+            <p class="form-help">定时备份 SQLite 数据库，保留最近 10 个备份</p>
+        </div>
+
+        <div class="form-group">
+            <label for="backupHours">备份间隔（小时）</label>
+            <input type="number" id="backupHours" name="backup_hours" class="form-control" value="24" min="1" max="168"
+                style="max-width:120px;">
+        </div>
+
+        <button type="submit" class="btn btn-primary">保存调度配置</button>
+    </form>
+
+    <!-- 任务状态 -->
+    <div id="schedulerJobs" style="margin-top:1rem; font-size:0.875rem; color:var(--text-muted);"></div>
+</div>
+
+<!-- 数据库备份 -->
+<div class="content-section">
+    <div class="section-header">
+        <h3>数据库备份</h3>
+        <button id="createBackupBtn" class="btn btn-primary btn-sm" onclick="createBackup()">立即备份</button>
+    </div>
+
+    <div id="backupsList" style="font-size: 0.875rem;">
+        <p style="color: var(--text-muted);">加载中...</p>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_css %}
@@ -123,6 +189,57 @@
 
 {% block extra_js %}
 <script>
+    // 代理检测
+    document.getElementById('testProxiesBtn').addEventListener('click', async () => {
+        const proxyText = document.getElementById('proxyUrl').value.trim();
+        if (!proxyText) {
+            showToast('请先输入需要检测的代理地址', 'warning');
+            return;
+        }
+
+        const btn = document.getElementById('testProxiesBtn');
+        const resultsDiv = document.getElementById('proxyTestResults');
+        const resultsList = document.getElementById('proxyTestList');
+
+        btn.disabled = true;
+        btn.innerText = '正在联通检测...';
+        resultsDiv.style.display = 'block';
+        resultsList.innerHTML = '<li>⌛ 正在并发检测您的代理池，请稍候约10秒...</li>';
+
+        try {
+            const response = await fetch('/admin/settings/proxy/test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ proxies: proxyText })
+            });
+            const data = await response.json();
+
+            resultsList.innerHTML = '';
+            if (response.ok && data.success) {
+                data.results.forEach(res => {
+                    const li = document.createElement('li');
+                    li.style.padding = '4px 0';
+                    li.style.borderBottom = '1px dashed var(--border-color)';
+                    if (res.status === 'success') {
+                        li.innerHTML = `✅ <span style="font-family: monospace;">${res.proxy}</span> - 连通! (延迟: <b>${res.latency}ms</b>) <span style="color:#888;">[HTTP ${res.http_status}]</span>`;
+                        li.style.color = '#10b981'; // tailwind green-500
+                    } else {
+                        li.innerHTML = `❌ <span style="font-family: monospace;">${res.proxy}</span> - 失败 <span style="color:#888;">(${res.error})</span>`;
+                        li.style.color = '#ef4444'; // tailwind red-500
+                    }
+                    resultsList.appendChild(li);
+                });
+            } else {
+                resultsList.innerHTML = `<li style="color:#ef4444;">检测请求出错: ${data.error || '未知错误'}</li>`;
+            }
+        } catch (error) {
+            resultsList.innerHTML = `<li style="color:#ef4444;">网络错误，无法完成检测</li>`;
+        } finally {
+            btn.disabled = false;
+            btn.innerText = '检测代理有效性';
+        }
+    });
+
     // 代理配置表单
     document.getElementById('proxyForm').addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -229,5 +346,116 @@
             showToast('网络错误', 'error');
         }
     });
+
+    // ===== 调度器 =====
+    async function loadSchedulerStatus() {
+        try {
+            const resp = await fetch('/admin/settings/scheduler/status');
+            const data = await resp.json();
+            const badge = document.getElementById('schedulerStatusBadge');
+            if (data.running) {
+                badge.textContent = '运行中';
+                badge.style.color = '#10b981';
+            } else {
+                badge.textContent = '已停止';
+                badge.style.color = '#ef4444';
+            }
+            const jobsDiv = document.getElementById('schedulerJobs');
+            if (data.jobs && data.jobs.length > 0) {
+                jobsDiv.innerHTML = '<b>当前任务:</b><br>' + data.jobs.map(j =>
+                    `• ${j.name} — 下次执行: ${j.next_run}`
+                ).join('<br>');
+            } else {
+                jobsDiv.innerHTML = '暂无已注册的定时任务';
+            }
+        } catch (e) { /* ignore */ }
+    }
+    loadSchedulerStatus();
+
+    document.getElementById('schedulerForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        try {
+            const resp = await fetch('/admin/settings/scheduler', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sync_enabled: document.getElementById('syncEnabled').checked,
+                    sync_hours: parseInt(document.getElementById('syncHours').value) || 6,
+                    backup_enabled: document.getElementById('backupEnabled').checked,
+                    backup_hours: parseInt(document.getElementById('backupHours').value) || 24
+                })
+            });
+            const data = await resp.json();
+            if (resp.ok && data.success) {
+                showToast('调度配置已保存并重启', 'success');
+                loadSchedulerStatus();
+            } else {
+                showToast(data.error || '保存失败', 'error');
+            }
+        } catch (err) { showToast('网络错误', 'error'); }
+    });
+
+    // ===== 备份管理 =====
+    async function loadBackups() {
+        try {
+            const resp = await fetch('/admin/settings/backups');
+            const data = await resp.json();
+            const div = document.getElementById('backupsList');
+            if (!data.success || !data.backups || data.backups.length === 0) {
+                div.innerHTML = '<p style="color:var(--text-muted);">暂无备份</p>';
+                return;
+            }
+            div.innerHTML = `<table class="data-table" style="font-size:0.875rem;">
+                <thead><tr><th>文件名</th><th>大小</th><th>创建时间</th><th style="text-align:right;">操作</th></tr></thead>
+                <tbody>${data.backups.map(b => `
+                    <tr>
+                        <td style="font-family:monospace;">${b.filename}</td>
+                        <td>${b.size_display}</td>
+                        <td>${b.created_at}</td>
+                        <td style="text-align:right;">
+                            <button class="btn btn-sm btn-secondary" onclick="restoreBackup('${b.filename}')">恢复</button>
+                        </td>
+                    </tr>
+                `).join('')}</tbody></table>`;
+        } catch (e) {
+            document.getElementById('backupsList').innerHTML = '<p style="color:#ef4444;">加载失败</p>';
+        }
+    }
+    loadBackups();
+
+    async function createBackup() {
+        const btn = document.getElementById('createBackupBtn');
+        btn.disabled = true;
+        btn.textContent = '备份中...';
+        try {
+            const resp = await fetch('/admin/settings/backup/create', { method: 'POST' });
+            const data = await resp.json();
+            if (resp.ok && data.success) {
+                showToast(`备份成功: ${data.filename}`, 'success');
+                loadBackups();
+            } else {
+                showToast(data.error || '备份失败', 'error');
+            }
+        } catch (err) { showToast('网络错误', 'error'); }
+        finally { btn.disabled = false; btn.textContent = '立即备份'; }
+    }
+
+    async function restoreBackup(filename) {
+        if (!confirm(`确定要恢复到备份 "${filename}" 吗？\n\n当前数据库将被自动备份后覆盖。恢复后建议重启服务。`)) return;
+        try {
+            const resp = await fetch('/admin/settings/backup/restore', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename })
+            });
+            const data = await resp.json();
+            if (resp.ok && data.success) {
+                showToast(data.message, 'success');
+                loadBackups();
+            } else {
+                showToast(data.error || '恢复失败', 'error');
+            }
+        } catch (err) { showToast('网络错误', 'error'); }
+    }
 </script>
 {% endblock %}

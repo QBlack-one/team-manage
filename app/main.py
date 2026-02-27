@@ -51,7 +51,21 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"数据库初始化失败: {e}")
     
+    # 3. 启动定时任务调度器
+    try:
+        from app.services.scheduler import scheduler_service
+        await scheduler_service.start()
+    except Exception as e:
+        logger.error(f"调度器启动失败: {e}")
+    
     yield
+    
+    # 停止调度器
+    try:
+        from app.services.scheduler import scheduler_service
+        await scheduler_service.stop()
+    except Exception as e:
+        logger.error(f"调度器停止失败: {e}")
     
     # 关闭连接
     await close_db()

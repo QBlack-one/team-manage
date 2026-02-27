@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>查询兑换记录</title>
+    <!-- Google Fonts - Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/user.css') }}">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .query-form {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .query-form .form-group {
+            flex: 1;
+            margin-bottom: 0;
+        }
+
+        .records-container {
+            margin-top: 2rem;
+        }
+
+        .record-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+            transition: border-color 0.2s ease;
+        }
+
+        .record-card:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .record-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .record-code {
+            font-family: 'Courier New', monospace;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--primary-light, #818cf8);
+        }
+
+        .record-type {
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .record-type.team {
+            background: rgba(99, 102, 241, 0.2);
+            color: #818cf8;
+        }
+
+        .record-type.plus {
+            background: rgba(16, 185, 129, 0.2);
+            color: #6ee7b7;
+        }
+
+        .record-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .record-detail {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .record-detail-label {
+            font-size: 0.78rem;
+            color: var(--text-muted, #9ca3af);
+        }
+
+        .record-detail-value {
+            font-size: 0.92rem;
+            color: var(--text-primary, #e5e7eb);
+            font-weight: 500;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .status-badge.active {
+            background: rgba(16, 185, 129, 0.2);
+            color: #6ee7b7;
+        }
+
+        .status-badge.full {
+            background: rgba(245, 158, 11, 0.2);
+            color: #fbbf24;
+        }
+
+        .status-badge.error {
+            background: rgba(239, 68, 68, 0.2);
+            color: #fca5a5;
+        }
+
+        .status-badge.expired {
+            background: rgba(107, 114, 128, 0.2);
+            color: #9ca3af;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--text-muted, #9ca3af);
+        }
+
+        .empty-state i {
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted, #9ca3af);
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--text-muted, #9ca3af);
+            text-decoration: none;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+            transition: color 0.2s;
+        }
+
+        .back-link:hover {
+            color: var(--text-primary, #e5e7eb);
+        }
+
+        @media (max-width: 480px) {
+            .query-form {
+                flex-direction: column;
+            }
+
+            .record-details {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <a href="/" class="back-link">
+            <i data-lucide="arrow-left" style="width: 16px; height: 16px;"></i> 返回兑换页面
+        </a>
+
+        <div class="header">
+            <h1>查询兑换记录</h1>
+            <p class="subtitle">输入邮箱查看您的兑换记录和 Team 状态</p>
+        </div>
+
+        <div class="card">
+            <form id="queryForm" class="query-form">
+                <div class="form-group">
+                    <label for="email">邮箱地址</label>
+                    <input type="email" id="email" name="email" required placeholder="请输入您的邮箱" class="form-input">
+                </div>
+                <button type="submit" class="btn btn-primary" id="queryBtn" style="white-space: nowrap;">
+                    <i data-lucide="search" style="width: 16px; height: 16px;"></i> 查询
+                </button>
+            </form>
+        </div>
+
+        <!-- 查询结果 -->
+        <div id="resultsContainer" class="records-container" style="display: none;">
+            <h2 id="resultsTitle" style="margin-bottom: 1rem; font-size: 1.1rem;"></h2>
+            <div id="recordsList"></div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast"></div>
+
+    <script>
+        // Toast 提示
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast show ${type}`;
+            setTimeout(() => { toast.className = 'toast'; }, 3000);
+        }
+
+        // 状态中文映射
+        const statusMap = {
+            'active': '正常',
+            'full': '已满',
+            'error': '异常',
+            'expired': '已过期'
+        };
+
+        // 查询表单
+        document.getElementById('queryForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value.trim();
+            if (!email) return;
+
+            const btn = document.getElementById('queryBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader-2" style="width: 16px; height: 16px;" class="spin"></i> 查询中...';
+
+            try {
+                const resp = await fetch('/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+
+                const data = await resp.json();
+
+                if (!resp.ok) {
+                    showToast(data.detail || '查询失败', 'error');
+                    return;
+                }
+
+                const container = document.getElementById('resultsContainer');
+                const title = document.getElementById('resultsTitle');
+                const list = document.getElementById('recordsList');
+
+                container.style.display = 'block';
+
+                if (data.total === 0) {
+                    title.textContent = '';
+                    list.innerHTML = `
+                        <div class="empty-state">
+                            <i data-lucide="inbox" style="width: 48px; height: 48px;"></i>
+                            <p>该邮箱暂无兑换记录</p>
+                        </div>
+                    `;
+                } else {
+                    title.textContent = `共找到 ${data.total} 条兑换记录`;
+                    list.innerHTML = data.records.map(r => `
+                        <div class="record-card">
+                            <div class="record-header">
+                                <span class="record-code">${r.code}</span>
+                                <span class="record-type ${r.code_type}">${r.code_type.toUpperCase()}</span>
+                            </div>
+                            <div class="record-details">
+                                <div class="record-detail">
+                                    <span class="record-detail-label">兑换时间</span>
+                                    <span class="record-detail-value">${r.redeemed_at}</span>
+                                </div>
+                                <div class="record-detail">
+                                    <span class="record-detail-label">Team 名称</span>
+                                    <span class="record-detail-value">${r.team_name}</span>
+                                </div>
+                                <div class="record-detail">
+                                    <span class="record-detail-label">Team 状态</span>
+                                    <span class="record-detail-value">
+                                        <span class="status-badge ${r.team_status}">${statusMap[r.team_status] || r.team_status}</span>
+                                    </span>
+                                </div>
+                                <div class="record-detail">
+                                    <span class="record-detail-label">到期时间</span>
+                                    <span class="record-detail-value">${r.team_expires_at}</span>
+                                </div>
+                                <div class="record-detail">
+                                    <span class="record-detail-label">订阅计划</span>
+                                    <span class="record-detail-value">${r.team_plan}</span>
+                                </div>
+                                <div class="record-detail">
+                                    <span class="record-detail-label">成员数</span>
+                                    <span class="record-detail-value">${r.team_members}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+                if (window.lucide) lucide.createIcons();
+
+            } catch (err) {
+                showToast('网络错误，请稍后重试', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="search" style="width: 16px; height: 16px;"></i> 查询';
+                if (window.lucide) lucide.createIcons();
+            }
+        });
+
+        if (window.lucide) lucide.createIcons();
+    </script>
+
+    <style>
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .spin { animation: spin 1s linear infinite; }
+    </style>
+</body>
+
+</html>
