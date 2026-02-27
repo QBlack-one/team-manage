@@ -312,9 +312,16 @@ class RedeemFlowService:
 
                     logger.info(f"兑换成功: {email} 加入 Team {team_id} (兑换码: {code})")
 
+                    is_retry = validate_result.get("is_retry", False)
+                    if is_retry:
+                        msg = f"原 Team 异常，已重新分配至 Team: {team.team_name}"
+                    else:
+                        msg = f"成功加入 Team: {team.team_name}"
+
                     return {
                         "success": True,
-                        "message": f"成功加入 Team: {team.team_name}",
+                        "message": msg,
+                        "is_retry": is_retry,
                         "team_info": {
                             "team_id": team.id,
                             "team_name": team.team_name,

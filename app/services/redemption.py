@@ -273,12 +273,13 @@ class RedemptionService:
                         redemption_code.used_team_id = None
                         redemption_code.used_at = None
                         await db_session.commit()
-                        # 继续后续验证流程（不 return）
+                        # 标记为重试，继续后续验证流程（不 return）
+                        is_retry = True
                     else:
                         return {
                             "success": True,
                             "valid": False,
-                            "reason": "兑换码已被使用",
+                            "reason": "该兑换码已使用，当前关联的 Team 正常运行中，无需重新兑换",
                             "redemption_code": None,
                             "error": None
                         }
@@ -319,6 +320,7 @@ class RedemptionService:
                 "success": True,
                 "valid": True,
                 "reason": "兑换码有效",
+                "is_retry": is_retry if 'is_retry' in dir() else False,
                 "code_type": redemption_code.code_type or "team",
                 "redemption_code": {
                     "id": redemption_code.id,
@@ -442,6 +444,7 @@ class RedemptionService:
                     "id": code.id,
                     "code": code.code,
                     "code_type": code.code_type or "team",
+                    "reusable": bool(code.reusable),
                     "status": code.status,
                     "created_at": code.created_at.isoformat() if code.created_at else None,
                     "expires_at": code.expires_at.isoformat() if code.expires_at else None,
