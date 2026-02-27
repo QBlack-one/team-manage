@@ -106,7 +106,7 @@ class RedeemFlowService:
         db_session: AsyncSession
     ) -> Dict[str, Any]:
         """
-        自动选择 Team (选择过期时间最早的)
+        自动选择 Team (随机分配，实现负载均衡)
 
         Args:
             db_session: 数据库会话
@@ -115,23 +115,29 @@ class RedeemFlowService:
             结果字典,包含 success, team_id, error
         """
         try:
-            # 查询可用 Team，按过期时间升序排序
+            import random
+
+            # 查询所有可用 Team
             stmt = select(Team).where(
                 Team.status == "active",
                 Team.current_members < Team.max_members
-            ).order_by(Team.expires_at.asc()).limit(1)
+            )
 
             result = await db_session.execute(stmt)
-            team = result.scalar_one_or_none()
+            teams = result.scalars().all()
 
-            if not team:
+            if not teams:
                 return {
                     "success": False,
                     "team_id": None,
                     "error": "没有可用的 Team"
                 }
 
-            logger.info(f"自动选择 Team: {team.id} (过期时间: {team.expires_at})")
+            # 按剩余座位数加权随机（剩余越多概率越高）
+            weights = [t.max_members - t.current_members for t in teams]
+            team = random.choices(teams, weights=weights, k=1)[0]
+
+            logger.info(f"自动选择 Team: {team.id} (加权随机, 共 {len(teams)} 个可用)")
 
             return {
                 "success": True,
