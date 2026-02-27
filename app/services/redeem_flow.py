@@ -286,6 +286,11 @@ class RedeemFlowService:
                     redemption_code.used_team_id = team_id
                     redemption_code.used_at = get_now()
 
+                    # 可重用码：第一次使用时开始计时 30 天有效期
+                    if redemption_code.reusable and not redemption_code.expires_at:
+                        from datetime import timedelta
+                        redemption_code.expires_at = get_now() + timedelta(days=30)
+
                     # 8. 创建使用记录
                     redemption_record = RedemptionRecord(
                         email=email,

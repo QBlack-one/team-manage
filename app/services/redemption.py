@@ -52,7 +52,8 @@ class RedemptionService:
         db_session: AsyncSession,
         code: Optional[str] = None,
         expires_days: Optional[int] = None,
-        code_type: str = "team"
+        code_type: str = "team",
+        reusable: bool = False
     ) -> Dict[str, Any]:
         """
         生成单个兑换码
@@ -110,6 +111,7 @@ class RedemptionService:
             redemption_code = RedemptionCode(
                 code=code,
                 code_type=code_type,
+                reusable=reusable,
                 status="unused",
                 expires_at=expires_at
             )
@@ -141,7 +143,8 @@ class RedemptionService:
         db_session: AsyncSession,
         count: int,
         expires_days: Optional[int] = None,
-        code_type: str = "team"
+        code_type: str = "team",
+        reusable: bool = False
     ) -> Dict[str, Any]:
         """
         批量生成兑换码
@@ -195,6 +198,7 @@ class RedemptionService:
                 redemption_code = RedemptionCode(
                     code=code,
                     code_type=code_type,
+                    reusable=reusable,
                     status="unused",
                     expires_at=expires_at
                 )
@@ -254,12 +258,43 @@ class RedemptionService:
                 }
 
             # 2. 检查状态
-            if redemption_code.status != "unused":
-                reason = "兑换码已被使用" if redemption_code.status == "used" else f"兑换码已{redemption_code.status}"
+            if redemption_code.status == "used":
+                # 可重用的 Team 兑换码：如果关联 Team 状态为 error，允许重新使用
+                if redemption_code.reusable and redemption_code.code_type == "team" and redemption_code.used_team_id:
+                    team_stmt = select(Team).where(Team.id == redemption_code.used_team_id)
+                    team_result = await db_session.execute(team_stmt)
+                    team = team_result.scalar_one_or_none()
+
+                    if team and team.status == "error":
+                        # 重置兑换码状态，允许重新兑换
+                        logger.info(f"兑换码 {code} 关联的 Team {team.id} 状态为 error，允许重新使用")
+                        redemption_code.status = "unused"
+                        redemption_code.used_by_email = None
+                        redemption_code.used_team_id = None
+                        redemption_code.used_at = None
+                        await db_session.commit()
+                        # 继续后续验证流程（不 return）
+                    else:
+                        return {
+                            "success": True,
+                            "valid": False,
+                            "reason": "兑换码已被使用",
+                            "redemption_code": None,
+                            "error": None
+                        }
+                else:
+                    return {
+                        "success": True,
+                        "valid": False,
+                        "reason": "兑换码已被使用",
+                        "redemption_code": None,
+                        "error": None
+                    }
+            elif redemption_code.status != "unused":
                 return {
                     "success": True,
                     "valid": False,
-                    "reason": reason,
+                    "reason": f"兑换码已{redemption_code.status}",
                     "redemption_code": None,
                     "error": None
                 }

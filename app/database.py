@@ -71,6 +71,7 @@ async def _run_migrations(conn):
     """
     migrations = [
         ("teams", "error_message", "TEXT"),
+        ("redemption_codes", "reusable", "BOOLEAN DEFAULT 0"),
     ]
     for table, column, col_type in migrations:
         try:

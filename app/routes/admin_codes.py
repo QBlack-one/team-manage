@@ -34,6 +34,7 @@ class CodeGenerateRequest(BaseModel):
     count: Optional[int] = Field(None, description="生成数量 (批量生成)")
     expires_days: Optional[int] = Field(None, description="有效期天数")
     code_type: str = Field("team", description="兑换码类型: team 或 plus")
+    reusable: bool = Field(False, description="是否可重复使用(Team异常时可重新兑换)")
 
 
 @router.get("/codes", response_class=HTMLResponse)
@@ -104,7 +105,8 @@ async def generate_codes(
                 db_session=db,
                 code=generate_data.code,
                 expires_days=generate_data.expires_days,
-                code_type=generate_data.code_type
+                code_type=generate_data.code_type,
+                reusable=generate_data.reusable
             )
 
             if not result["success"]:
@@ -125,7 +127,8 @@ async def generate_codes(
                 db_session=db,
                 count=generate_data.count,
                 expires_days=generate_data.expires_days,
-                code_type=generate_data.code_type
+                code_type=generate_data.code_type,
+                reusable=generate_data.reusable
             )
 
             if not result["success"]:

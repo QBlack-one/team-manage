@@ -86,6 +86,7 @@ class RedemptionCode(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     code = Column(String(32), unique=True, nullable=False, comment="兑换码")
     code_type = Column(String(10), default="team", comment="类型: team/plus")
+    reusable = Column(Boolean, default=False, comment="是否可重复使用(有效期内Team异常可重新兑换)")
     status = Column(String(20), default="unused", comment="状态: unused/used/expired")
     created_at = Column(DateTime, default=get_now, comment="创建时间")
     expires_at = Column(DateTime, comment="过期时间")

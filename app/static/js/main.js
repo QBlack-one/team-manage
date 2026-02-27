@@ -364,8 +364,9 @@ async function generateSingle(event) {
     const customCode = form.customCode.value.trim();
     const expiresDays = form.expiresDays.value;
     const codeType = form.codeType.value;
+    const reusable = form.reusable.checked;
 
-    const data = { type: 'single', code_type: codeType };
+    const data = { type: 'single', code_type: codeType, reusable };
     if (customCode) data.code = customCode;
     if (expiresDays) data.expires_days = parseInt(expiresDays);
 
@@ -394,13 +395,14 @@ async function generateBatch(event) {
     const count = parseInt(form.count.value);
     const expiresDays = form.expiresDays.value;
     const codeType = form.codeType.value;
+    const reusable = form.reusable.checked;
 
     if (count < 1 || count > 1000) {
         showToast('生成数量必须在1-1000之间', 'error');
         return;
     }
 
-    const data = { type: 'batch', count: count, code_type: codeType };
+    const data = { type: 'batch', count: count, code_type: codeType, reusable };
     if (expiresDays) data.expires_days = parseInt(expiresDays);
 
     const result = await apiCall('/admin/codes/generate', {
